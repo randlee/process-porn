@@ -6,7 +6,7 @@ Pass every workflow file under `.github/workflows/`, so the script can see jobs 
 
 ## Context to collect
 
-Each item states one fact, cites its source, and is one line. Don't judge jobs here; Jev does that.
+Each item states one fact, cites its source, and is one line. Collect facts only; don't classify the jobs.
 
 1. **Required checks.** For the trunk branches (the default branch and any integration branch the user names):
    ```bash
@@ -34,8 +34,14 @@ python3 <script> ci .github/workflows/*.yml --context <file> --brief 240
 
 ## Reading results
 
-| Reason | Meaning |
-|---|---|
-| `remove_redundant` | Another job already runs the same command for the same trigger. Remove the duplicate, not the dedicated job that is a required check. |
-| `remove_report_only`, `remove_unconsumed_check` | Nothing downloads its output, and its failure blocks nothing. |
-| `fix_gate_weakening` | Typically `continue-on-error`, `if: always()` without a failing gate, path filters, or retries that hide red. |
+- `unit` is the workflow file name. `where` is `workflow header`, `jobs.<job>` (the job's keys before `steps:`) or `jobs.<job>.steps[<n>] <name>`, and `lines` are line numbers in the file.
+- Jev saw every reviewed job's non-setup steps, so `redundant` refers to a job listed in that inventory.
+
+| Pattern | Jev matched | Fact that settles it |
+|---|---|---|
+| `redundant` | Another job or step runs the same work for the same trigger | Which copy is a required check (step 1), or needed by a release job (step 4) |
+| `report_only` | A report, summary, badge, upload or notification | Whether anything downloads or gates on it (step 3) |
+| `unconsumed_check` | A check whose failure blocks nothing | Whether it is a required check (step 1) or called by another workflow (step 2) |
+| `gate_weakening` | `continue-on-error`, skip conditions, path filters or retries that let failures pass | The stated CI policy (step 5) and the branches the condition covers |
+
+`clear` covers gates, release jobs, and the triggers, permissions and setup they need.

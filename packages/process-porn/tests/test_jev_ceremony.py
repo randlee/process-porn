@@ -184,38 +184,46 @@ class CallerContextTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
-    def test_plan_report_routes_actions(self):
+    def test_plan_report_lists_findings_by_pattern(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "s.md"
             path.write_text(PLAN)
             unit = jc.md_units(path, "plan")[0]
-        pick = lambda t: "remove_ungated_artifact" if "ledger" in t else "fix_gate_weakening" if "unit tests" in t else "keep_capability"
+        pick = lambda t: "ungated_artifact" if "ledger" in t else "gate_weakening" if "unit tests" in t else "capability"
         report = jc.review_unit("plan", unit, "k", stub(pick))
-        self.assertEqual([(e["lines"], e["reason"]) for e in report["remove"]], [([11, 11], "remove_ungated_artifact")])
-        self.assertEqual([e["lines"] for e in report["fix"]], [[15, 15]])
-        self.assertEqual(report["kept"], 3)
+        self.assertEqual([(e["lines"], e["pattern"]) for e in report["findings"]],
+                         [([11, 11], "ungated_artifact"), ([15, 15], "gate_weakening")])
+        self.assertEqual(report["clear"], 3)
+        self.assertEqual(report["uncertain"], [])
 
-    def test_low_probability_needs_context(self):
+    def test_low_probability_is_uncertain_with_leaning(self):
         unit = PackingTests().unit(["a"])
-        report = jc.review_unit("instructions", unit, "k", stub(lambda t: "remove_narration", p=0.5))
-        self.assertEqual(len(report["needs_context"]), 1)
-        self.assertEqual(report["remove"], [])
+        report = jc.review_unit("instructions", unit, "k", stub(lambda t: "narration", p=0.5))
+        self.assertEqual(report["findings"], [])
+        entry = report["uncertain"][0]
+        self.assertEqual(entry["pattern"], "narration")
+        self.assertIn("clear_probability", entry)
 
-    def test_decide_sums_probability_within_an_action_group(self):
-        probs = {"keep_capability": 0.45, "keep_justified_process": 0.4, "remove_narration": 0.15, "insufficient": 0.0}
-        action, reason, prob = jc.decide(probs)
-        self.assertEqual((action, reason), ("keep", "keep_capability"))
-        self.assertAlmostEqual(prob, 0.85)
+    def test_classify_sums_groups(self):
+        probs = {"capability": 0.45, "justified_process": 0.4, "narration": 0.1, "gate_weakening": 0.05,
+                 "ungated_artifact": 0.0, "meta_review": 0.0, "follow_up_laundering": 0.0, "insufficient": 0.0}
+        groups = jc.classify("plan", probs)
+        self.assertAlmostEqual(groups["clear"], 0.85)
+        self.assertAlmostEqual(groups["pattern"], 0.15)
+
+    def test_every_clear_option_is_a_criterion(self):
+        for name, spec in jc.SITUATIONS.items():
+            self.assertTrue(set(spec["clear"]) < set(spec["criteria"]), name)
 
     def test_invalid_response_names_the_problem(self):
-        bad = answer("keep_gate", list(jc.SITUATIONS["ci"]["criteria"]))
-        bad["probabilities"]["keep_gate"] = 0.5
+        bad = answer("gate", list(jc.SITUATIONS["ci"]["criteria"]))
+        bad["probabilities"]["gate"] = 0.5
         self.assertRegex(jc.answer_problem(bad, set(jc.SITUATIONS["ci"]["criteria"])), "sum to")
 
     def test_two_decimal_rounding_is_accepted(self):
         options = list(jc.SITUATIONS["ci"]["criteria"])
-        ok = answer("keep_gate", options)
-        ok["probabilities"] = dict.fromkeys(options, 0.0) | {"keep_gate": 0.94, "keep_support": 0.05}
+        ok = answer("gate", options)
+        ok["probabilities"] = dict.fromkeys(options, 0.0) | {"gate": 0.94, "support": 0.05}
         self.assertIsNone(jc.answer_problem(ok, set(options)))
 
     def test_invalid_response_rejected(self):

@@ -83,4 +83,5 @@ To combine several calls, write the wrapped object to a file and pass `--beads-j
 
 ## Reading results
 
-`lines` are 1-based within `field`. To apply a change, update that field through the CLI only when the user asks, and replace the whole field text. For example, `bd update <id> --design "<new text>"` or `br update <id> --design "<new text>"`. Both accept `--description`, `--design`, `--acceptance-criteria` and `--notes`. Read `plan.md`'s results table for what each reason means.
+- `unit` is the bead id. `field` is the bead field the item came from, and `lines` are 1-based within that field's text. `where` starts with the field name, followed by the heading path inside it.
+- The patterns are the same as in `plan.md`'s results table. Metadata keys were in Jev's context, so `narration` on text that restates a key means Jev saw the key held as data.

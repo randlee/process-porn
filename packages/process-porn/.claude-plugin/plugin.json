@@ -1,7 +1,7 @@
 {
   "name": "process-porn",
-  "description": "Jev-backed ceremony review of sprint plans (md or beads), CI workflows and agent instructions: a router skill picks the category, the agent collects its context, and Jev answers one typed Choice question per item; the report names exact lines to remove or fix.",
-  "version": "0.1.0",
+  "description": "Jev-backed ceremony review of sprint plans (md or beads), CI workflows and agent instructions: a router skill picks the category, the agent collects its context, and Jev answers one typed Choice question per item; the findings locate the items that match a ceremony pattern.",
+  "version": "0.2.0",
   "author": {
     "name": "randlee"
   },

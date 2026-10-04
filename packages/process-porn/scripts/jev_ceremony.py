@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Find what to remove from sprint plans, CI workflows and agent instructions with the TypeSafe Jev agent.
+"""Locate likely ceremony patterns in sprint plans, CI workflows and agent instructions with the TypeSafe Jev agent.
 
 Each unit (one sprint, one workflow file, or one instruction file) is routed to
 Jev on its own. Every item in the unit (a list item, paragraph, table row or
 code block of markdown; the header, a job or a step of a workflow) gets one
-Choice question whose answer is the action to take. Items are packed into
+Choice question whose answer is the pattern that best fits it. Items are packed into
 requests under MAX_REQUEST_BYTES with the unit's context repeated in each
 request. The report is computed here from the answers.
 """
@@ -44,65 +44,68 @@ CORE = (
 SITUATIONS = {
     "plan": {
         "rules": CORE + (
-            "You are reviewing one sprint plan, item by item. Keep items that tell the implementer what to build, how it must behave, "
+            "You are classifying one sprint plan, item by item. Capability items tell the implementer what to build, how it must behave, "
             "which interfaces and paths it touches, or which real tests and validation commands must pass. "
             "Naming work that is out of scope and owned by another named sprint is scope, not follow-up laundering. "
-            "Remove ungated process artifacts, review or governance rounds about the process itself, and narration: history, provenance, "
-            "rationale, status or restatement that gives the implementer no instruction and that nothing checks. "
-            "Fix, rather than remove, items that weaken or self-certify a test or gate, accept mocks or self-review as live proof, "
-            "or move in-scope acceptance into a follow-up so the sprint can close."
+            "The patterns are: ungated process artifacts; review or governance rounds about the process itself; narration (history, provenance, "
+            "rationale, status or restatement that gives the implementer no instruction and that nothing checks); items that weaken or self-certify "
+            "a test or gate, or accept mocks or self-review as live proof; and items that move in-scope acceptance into a follow-up so the sprint can close."
         ),
-        "instructions": "Classify item {id} (state.items.{id}) of the sprint plan in state.unit, using state.rules and state.context. Choose the one action the plan author should take for this item.",
+        "instructions": "Choose the description that best fits item {id} (state.items.{id}) of the sprint plan in state.unit, using state.rules and state.context.",
+        "clear": ("capability", "justified_process"),
         "criteria": {
-            "keep_capability": "specifies behavior, interfaces, code, data, owned paths or a test of real behavior the sprint delivers",
-            "keep_justified_process": "a process step or validation command that runs and blocks merge, or names consumer, gate, observed defect and retirement",
-            "remove_ungated_artifact": "creates or requires a process artifact without consumer, gate, observed defect and retirement",
-            "remove_meta_review": "a review, governance or schema round about the process apparatus rather than the deliverable",
-            "remove_narration": "history, provenance, rationale, status or restatement that instructs no one and that nothing checks",
-            "fix_gate_weakening": "weakens, bypasses or self-certifies a test or gate, or accepts mocks or self-review as live proof",
-            "fix_follow_up_laundering": "moves in-scope acceptance into a follow-up so the sprint can close",
+            "capability": "specifies behavior, interfaces, code, data, owned paths or a test of real behavior the sprint delivers",
+            "justified_process": "a process step or validation command that runs and blocks merge, or names consumer, gate, observed defect and retirement",
+            "ungated_artifact": "creates or requires a process artifact without consumer, gate, observed defect and retirement",
+            "meta_review": "a review, governance or schema round about the process apparatus rather than the deliverable",
+            "narration": "history, provenance, rationale, status or restatement that instructs no one and that nothing checks",
+            "gate_weakening": "weakens, bypasses or self-certifies a test or gate, or accepts mocks or self-review as live proof",
+            "follow_up_laundering": "moves in-scope acceptance into a follow-up so the sprint can close",
             "insufficient": "the item and context are not enough to tell",
         },
     },
     "ci": {
         "rules": CORE + (
-            "You are reviewing one CI workflow file, item by item: the workflow header (triggers, permissions, concurrency), each job, each step. "
+            "You are classifying one CI workflow file, item by item: the workflow header (triggers, permissions, concurrency), each job, each step. "
             "state.context lists every job in every reviewed workflow so you can see duplication. "
-            "Keep what builds, lints or tests the product when its failure blocks a merge or release, what builds or publishes a shipped artifact, "
-            "and setup that a kept job needs. Remove reports, summaries, badges, uploads and notifications that nothing gates on, work that another "
-            "job or step already does for the same trigger, and checks whose failure blocks nothing. "
-            "Fix, rather than remove, items that let failures pass: continue-on-error, skip conditions, path filters or retries that hide red."
+            "Gates build, lint or test the product and their failure blocks a merge or release; release items build or publish a shipped artifact; "
+            "support is setup a gate or release job needs. The patterns are: reports, summaries, badges, uploads and notifications that nothing gates on; "
+            "work that another job or step already does for the same trigger; checks whose failure blocks nothing; and items that let failures pass "
+            "(continue-on-error, skip conditions, path filters or retries that hide red)."
         ),
-        "instructions": "Classify item {id} (state.items.{id}) of the CI workflow in state.unit, using state.rules and state.context. Choose the one action the workflow owner should take for this item.",
+        "instructions": "Choose the description that best fits item {id} (state.items.{id}) of the CI workflow in state.unit, using state.rules and state.context.",
+        "clear": ("gate", "release", "support"),
         "criteria": {
-            "keep_gate": "builds, lints or tests the product and its failure blocks merge or release",
-            "keep_release": "builds, signs or publishes a shipped artifact",
-            "keep_support": "triggers, permissions or setup (checkout, toolchain, cache) that a kept job needs",
-            "remove_report_only": "produces a report, summary, badge, upload or notification that nothing gates on",
-            "remove_redundant": "repeats work that another job or step in state.context already does for the same trigger",
-            "remove_unconsumed_check": "a check whose failure blocks nothing",
-            "fix_gate_weakening": "continue-on-error, skip conditions, path filters or retries that let failures pass",
+            "gate": "builds, lints or tests the product and its failure blocks merge or release",
+            "release": "builds, signs or publishes a shipped artifact",
+            "support": "triggers, permissions or setup (checkout, toolchain, cache) that a gate or release job needs",
+            "report_only": "produces a report, summary, badge, upload or notification that nothing gates on",
+            "redundant": "repeats work that another job or step in state.context already does for the same trigger",
+            "unconsumed_check": "a check whose failure blocks nothing",
+            "gate_weakening": "continue-on-error, skip conditions, path filters or retries that let failures pass",
             "insufficient": "the item and context are not enough to tell",
         },
     },
     "instructions": {
         "rules": CORE + (
-            "You are reviewing one agent instruction file (CLAUDE.md, AGENTS.md, a skill or an agent prompt), item by item. "
-            "Every item costs context on every run of the agent that loads it. Keep items that change what the agent does: a rule with its trigger, "
+            "You are classifying one agent instruction file (CLAUDE.md, AGENTS.md, a skill or an agent prompt), item by item. "
+            "Every item costs context on every run of the agent that loads it. Instructions change what the agent does: a rule with its trigger, "
             "a step, a command, a path, a format, a limit, or a pointer to a file the agent must read. "
-            "Remove items that tell the agent to create or maintain an ungated process artifact, that mandate review or governance rounds about the "
-            "process itself, and narration: history, incident stories, purpose or motivation sections, rationale beyond what the rule needs, "
-            "and restatement of a rule already given. "
-            "Fix, rather than remove, items that tell the agent to weaken, skip or self-certify tests or gates, or to accept mocks or self-review as live proof."
+            "The patterns are: telling the agent to create or maintain an ungated process artifact; mandating review or governance rounds about the "
+            "process itself; narration (history, incident stories, purpose or motivation sections, rationale beyond what the rule needs, "
+            "restatement of a rule already given); telling the agent to weaken, skip or self-certify tests or gates, or to accept mocks or self-review "
+            "as live proof; and naming a path or command that state.caller_context records as missing."
         ),
-        "instructions": "Classify item {id} (state.items.{id}) of the instruction file in state.unit, using state.rules and state.context. Choose the one action the file's author should take for this item.",
+        "instructions": "Choose the description that best fits item {id} (state.items.{id}) of the instruction file in state.unit, using state.rules and state.context.",
+        "clear": ("instruction", "reference"),
         "criteria": {
-            "keep_instruction": "a rule, step, constraint or trigger that changes what the agent does",
-            "keep_reference": "a command, path, format, limit or pointer the agent needs to act",
-            "remove_ungated_artifact": "tells the agent to create or maintain a process artifact without consumer, gate, observed defect and retirement",
-            "remove_meta_review": "mandates a review, governance or approval round about the process rather than the work",
-            "remove_narration": "history, incident story, purpose, motivation, excess rationale or restatement that changes no action",
-            "fix_gate_weakening": "tells the agent to weaken, skip or self-certify tests or gates, or accept mocks or self-review as live proof",
+            "instruction": "a rule, step, constraint or trigger that changes what the agent does",
+            "reference": "a command, path, format, limit or pointer the agent needs to act, and that exists",
+            "ungated_artifact": "tells the agent to create or maintain a process artifact without consumer, gate, observed defect and retirement",
+            "meta_review": "mandates a review, governance or approval round about the process rather than the work",
+            "narration": "history, incident story, purpose, motivation, excess rationale or restatement that changes no action",
+            "gate_weakening": "tells the agent to weaken, skip or self-certify tests or gates, or accept mocks or self-review as live proof",
+            "stale_reference": "names a path or command that state.caller_context records as missing",
             "insufficient": "the item and context are not enough to tell",
         },
     },
@@ -465,31 +468,37 @@ def evaluate(request, key, transport=post):
 
 # ---------- report ----------
 
-def decide(probs):
-    """Pick the action group (keep, remove, fix, insufficient) with the most probability, then its top reason."""
-    groups, total = {}, sum(probs.values()) or 1
-    for option, p in ((o, p / total) for o, p in probs.items()):
-        groups.setdefault(option.split("_", 1)[0], []).append((p, option))
-    action = max(groups, key=lambda g: sum(p for p, _ in groups[g]))
-    return action, max(groups[action])[1], sum(p for p, _ in groups[action])
+def classify(situation, probs):
+    """Normalize, then sum probability into clear, pattern and insufficient groups."""
+    clear, total = SITUATIONS[situation]["clear"], sum(probs.values()) or 1
+    norm = {o: p / total for o, p in probs.items()}
+    patterns = {o: p for o, p in norm.items() if o not in clear and o != "insufficient"}
+    return {"clear": sum(norm[o] for o in clear), "pattern": sum(patterns.values()),
+            "insufficient": norm.get("insufficient", 0.0), "patterns": patterns}
 
 
 def review_unit(situation, unit, key, transport=post, minimum_probability=0.8):
-    report = {"unit": unit["id"], "source": unit["source"], "remove": [], "fix": [], "needs_context": [], "kept": 0}
+    """Findings: pattern probability at or above the minimum. Uncertain: neither clear nor pattern reached it."""
+    report = {"unit": unit["id"], "source": unit["source"], "findings": [], "uncertain": [], "clear": 0}
     for batch in batches(situation, unit):
         answers = evaluate(build_request(situation, unit, batch), key, transport)["answers"]
         for item in batch:
-            action, reason, prob = decide(answers[item["qid"]]["probabilities"])
+            groups = classify(situation, answers[item["qid"]]["probabilities"])
+            if groups["clear"] >= minimum_probability:
+                report["clear"] += 1
+                continue
+            ranked = sorted(((p, o) for o, p in groups["patterns"].items() if p >= 0.05), reverse=True)
             entry = {"item": item["qid"], "where": item["path"], "lines": [item["start"], item["end"]],
-                     "action": action, "reason": reason, "probability": round(prob, 3), "text": item["text"]}
+                     "pattern": ranked[0][1] if ranked else None, "probability": round(groups["pattern"], 2),
+                     "patterns": {o: round(p, 2) for p, o in ranked}, "text": item["text"]}
             if "field" in item:
                 entry["field"] = item["field"]
-            if action == "insufficient" or prob < minimum_probability:
-                report["needs_context"].append(entry)
-            elif action == "keep":
-                report["kept"] += 1
+            if groups["pattern"] >= minimum_probability:
+                report["findings"].append(entry)
             else:
-                report[action].append(entry)
+                entry["clear_probability"] = round(groups["clear"], 2)
+                entry["insufficient_probability"] = round(groups["insufficient"], 2)
+                report["uncertain"].append(entry)
     return report
 
 
@@ -557,10 +566,10 @@ def main(argv=None):
         else:
             key = api_key()
             reports = [review_unit(args.situation, u, key, minimum_probability=args.minimum_probability) for u in units]
-            totals = {k: sum(len(r[k]) for r in reports) for k in ("remove", "fix", "needs_context")}
-            totals["kept"] = sum(r["kept"] for r in reports)
+            totals = {k: sum(len(r[k]) for r in reports) for k in ("findings", "uncertain")}
+            totals["clear"] = sum(r["clear"] for r in reports)
             if args.brief:
-                for entry in (e for r in reports for k in ("remove", "fix", "needs_context") for e in r[k]):
+                for entry in (e for r in reports for k in ("findings", "uncertain") for e in r[k]):
                     if len(entry["text"]) > args.brief:
                         entry["text"] = entry["text"][:args.brief] + "…"
             data = {"situation": args.situation, "units": reports, "totals": totals}
@@ -573,7 +582,7 @@ def main(argv=None):
     if not result["success"]:
         return 2
     totals = result["data"].get("totals", {})
-    return 1 if totals.get("remove") or totals.get("fix") else 0
+    return 1 if totals.get("findings") else 0
 
 
 if __name__ == "__main__":

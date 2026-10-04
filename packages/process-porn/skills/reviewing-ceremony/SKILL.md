@@ -1,14 +1,16 @@
 ---
 name: reviewing-ceremony
-version: 0.1.0
+version: 0.2.0
 description: >
-  Find exactly what to remove or fix in sprint plans (md files or beads), CI workflows,
-  and agent instructions (CLAUDE.md, AGENTS.md, skills, agent prompts) with the TypeSafe Jev agent.
+  Locate likely ceremony in sprint plans (md files or beads), CI workflows, and agent instructions
+  (CLAUDE.md, AGENTS.md, skills, agent prompts) with the TypeSafe Jev agent, item by item.
   Use when asked to review a plan, CI or instructions for process porn, ceremony, ungated process
   artifacts, narration, redundant or report-only CI jobs, or weakened gates.
 ---
 
 # Reviewing Ceremony
+
+Jev classifies every item of a plan, workflow or instruction file against a fixed set of ceremony patterns, so you can quickly locate the items that need a closer look. Each finding gives the item's location, the pattern Jev matched and how likely the match is. You then review the findings against the repo's own guidelines and give your recommendations.
 
 ## Step 1: Verify python3 and the API key
 
@@ -25,41 +27,40 @@ If python3 is still missing, or the key is unset, read `references/installation-
 
 ## Step 2: Route by category
 
-| Category | Reviewed | Reference | Agent |
-|---|---|---|---|
-| `plan` | sprint plans in md files | `references/plan.md` | `ceremony-review` |
-| `plan` (beads) | sprint beads, from `bd` or `br` | `references/plan-beads.md` | `ceremony-review` |
-| `ci` | CI workflow files | `references/ci.md` | `ceremony-review` |
-| `instructions` | CLAUDE.md, AGENTS.md, skills, agent prompts | `references/instructions.md` | `ceremony-review` |
+| Category | Reviewed | Reference |
+|---|---|---|
+| `plan` | sprint plans in md files | `references/plan.md` |
+| `plan` (beads) | sprint beads, from `bd` or `br` | `references/plan-beads.md` |
+| `ci` | CI workflow files | `references/ci.md` |
+| `instructions` | CLAUDE.md, AGENTS.md, skills, agent prompts | `references/instructions.md` |
 
-Read only the matching reference. It defines:
-- the inputs;
-- the context to collect and how to collect it;
-- the context file format;
-- how to read the results.
+If a plan exists both as md and as beads, review the copy the repo treats as the source. Read only the matching reference. A request that spans categories runs once per category.
 
-A request that spans categories runs once per category.
-
-## Agent Delegation
-
-Invoke `ceremony-review` with the Task tool, passing these parameters:
+Invoke the `ceremony-review` agent with the Task tool, passing:
 - `category`;
 - `reference`: the absolute path of the matching reference;
 - `inputs`;
 - any options the reference names.
 
-The agent collects the context, runs the script once per run the reference calls for, and returns fenced JSON:
-- per unit, the `remove`, `fix` and `needs_context` lists, each entry with `where`, `lines`, `reason`, `probability` and `text`, plus `kept`;
-- `totals`;
-- `context_file`, the context it sent.
+The agent collects the context the reference describes, runs the script, and returns fenced JSON. Treat unfenced or malformed JSON as a failure.
 
-Treat unfenced or malformed JSON as a failure.
+## Step 3: Review the findings
 
-## Step 3: Report, then apply on request
+The result has, per unit:
+- `findings`: items whose pattern probability reached the threshold (0.8). Each has `where`, `lines`, `pattern`, `probability`, `patterns` (every pattern at 0.05 or more) and the start of `text`. Bead findings also have `field`.
+- `uncertain`: items that reached the threshold neither as a pattern nor as clear. They carry the same fields plus `clear_probability` and `insufficient_probability`.
+- `clear`: the count of items Jev classified as clear.
 
-- Show `totals`, then one line per remove or fix: unit, `where`, lines and reason. List `needs_context` separately as unscored.
-- Apply changes only when the user asks.
-  - **remove:** delete the item's lines, working from the bottom of the file up so the line numbers stay valid. Then fix any reference or numbering the deletion broke.
-  - **fix:** change the item so the gate holds. Don't delete it.
-  - Leave `needs_context` items unchanged.
-- On `success: false`, report `error.code`, `message` and `suggested_action`. Don't substitute your own judgment as a Jev result.
+`data.context_file` is the context Jev saw. The reference's "Reading results" section says what each pattern means for that category and which fact settles it.
+
+For each finding, read the full item at its location and check it against:
+- the item's surroundings;
+- the facts in `context_file`;
+- the repo's own guidelines (CLAUDE.md, AGENTS.md, team docs).
+
+Report, per unit:
+- each finding: location, Jev's pattern and probability, your assessment, and your recommendation. Say where you disagree with Jev, and why;
+- the `uncertain` items whose `pattern` you would look at, with Jev's leaning;
+- the counts: findings, uncertain, clear.
+
+On `success: false`, report `error.code`, `message` and `suggested_action`. Don't substitute your own judgment for a Jev result.

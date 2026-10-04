@@ -1,5 +1,5 @@
 # process-porn
-Skills and scripts for TypeSafe Jev agent to unnecessary process and ceremony
+Skills and scripts that use the TypeSafe Jev agent to locate unnecessary process and ceremony.
 
 ## Install
 
@@ -12,7 +12,7 @@ Skills and scripts for TypeSafe Jev agent to unnecessary process and ceremony
 
 `packages/process-porn` provides:
 - the `reviewing-ceremony` skill. It routes by category (`plan`, `ci`, `instructions`), and each category's reference says what context to collect.
-- the `ceremony-review` agent. It collects that context, runs `scripts/jev_ceremony.py` and returns the remove/fix report as fenced JSON.
+- the `ceremony-review` agent. It collects that context, runs `scripts/jev_ceremony.py` and returns the findings as fenced JSON.
 
 It needs python3 and `TYPESAFE_API_KEY`. See [the skill](packages/process-porn/skills/reviewing-ceremony/SKILL.md).
 

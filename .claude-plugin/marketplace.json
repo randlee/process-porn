@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "process-porn",
-      "description": "reviewing-ceremony: per-category Jev review of sprint plans, CI workflows and agent instructions; reports exact lines to remove or fix.",
+      "description": "reviewing-ceremony: per-category Jev review of sprint plans, CI workflows and agent instructions; locates items that match a ceremony pattern.",
       "author": {
         "name": "randlee"
       },

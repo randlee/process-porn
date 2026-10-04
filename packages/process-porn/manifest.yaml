@@ -1,9 +1,9 @@
 name: process-porn
-version: 0.1.0
+version: 0.2.0
 description: >
   Jev-backed ceremony review of sprint plans (md or beads), CI workflows and agent instructions.
   A router skill picks the category; the agent collects that category's context, routes one
-  typed Choice question per item to Jev, and reports exact lines to remove or fix.
+  typed Choice question per item to Jev, and returns the items that match a ceremony pattern.
 author: randlee
 license: MIT
 tags:

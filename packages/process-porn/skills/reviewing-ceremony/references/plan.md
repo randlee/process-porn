@@ -10,7 +10,7 @@ One run covers one phase. Run once per phase, because the context below is phase
 
 ## Context to collect
 
-Each item states one fact, cites its source path, and is one line, two at most. Don't judge plan items here; Jev does that.
+Each item states one fact, cites its source path, and is one line, two at most. Collect facts only; don't classify the plan items.
 
 1. **Phase goal.** Take the opening paragraph of the phase plan or README, up to about 1,000 bytes.
 2. **Tools that read plan fields.** These stop data that tools read from being flagged as narration.
@@ -38,8 +38,15 @@ python3 <script> plan <inputs...> [--sprint-level N] --context <file> --brief 24
 
 ## Reading results
 
-| Reason | Meaning |
-|---|---|
-| `remove_narration` on a metadata field | The context named no reader. If a reader exists that the search missed, report it rather than deleting the field. |
-| `remove_ungated_artifact`, `remove_meta_review` | A ledger, report or review round with no consumer and no gate. |
-| `fix_gate_weakening`, `fix_follow_up_laundering` | Rewrite the item so the gate holds, or restore the in-scope acceptance. |
+- `unit` is `<file>:<sprint heading>`. `where` is the heading path to the item, and `lines` are line numbers in the file.
+- Items are list items, paragraphs, table rows (sent with the table's header row) and code blocks.
+
+| Pattern | Jev matched | Fact that settles it |
+|---|---|---|
+| `narration` | History, provenance, rationale, status or restatement that instructs no one | Whether a tool reads the field (step 2), or the bead already holds it (step 3) |
+| `ungated_artifact` | A ledger, report, matrix or certificate with no consumer, gate, observed defect and retirement | Whether anything reads or gates on the artifact |
+| `meta_review` | A review or governance round about the process rather than the deliverable | Whether the round can block the deliverable |
+| `gate_weakening` | A skip, `continue-on-error`, reduced check, mock or self-review accepted as proof | Whether CI runs the check as written (step 5) |
+| `follow_up_laundering` | In-scope acceptance moved to a follow-up | Whether the follow-up owner exists in the phase (step 4) |
+
+`clear` covers capability items and justified process: a validation command that runs and blocks merge, or a process step that names its consumer, gate, defect and retirement.

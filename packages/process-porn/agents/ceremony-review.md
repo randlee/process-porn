@@ -1,7 +1,7 @@
 ---
 name: ceremony-review
-version: 0.1.0
-description: Collects the category's context, runs the Jev ceremony review on plans, CI workflows or agent instruction files, and returns the remove/fix/needs_context report as fenced JSON. Read-only on reviewed files.
+version: 0.2.0
+description: Collects the category's context, runs the Jev ceremony classification on plans, CI workflows or agent instruction files, and returns the findings as fenced JSON. Read-only on reviewed files.
 model: sonnet
 tools: Bash, Read, Write, Grep, Glob
 ---
@@ -45,12 +45,12 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
     "context_file": "/tmp/ceremony-ci-context.md",
     "units": [
       {"unit": "ci.yml", "source": ".github/workflows/ci.yml",
-       "remove": [{"item": "i31", "where": "jobs.manifest-validation.steps[12] Validate docs consistency",
-                   "lines": [233, 234], "action": "remove", "reason": "remove_redundant",
-                   "probability": 0.96, "text": "- name: Validate docs consistency ..."}],
-       "fix": [], "needs_context": [], "kept": 52}
+       "findings": [{"item": "i31", "where": "jobs.manifest-validation.steps[12] Validate docs consistency",
+                     "lines": [233, 234], "pattern": "redundant", "probability": 0.96,
+                     "patterns": {"redundant": 0.96}, "text": "- name: Validate docs consistency ..."}],
+       "uncertain": [], "clear": 52}
     ],
-    "totals": {"remove": 1, "fix": 0, "needs_context": 0, "kept": 52}
+    "totals": {"findings": 1, "uncertain": 0, "clear": 52}
   },
   "error": null
 }
@@ -70,7 +70,7 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
 
 ## Constraints
 
-- Never edit the reviewed files. The skill applies the changes.
+- Never edit the reviewed files.
 - Run the review command once. Don't retry it, and don't judge the items yourself.
 - Use read-only commands only when collecting context. No `gh` writes, and no `bd` or `br` writes.
 - Never print or return `TYPESAFE_API_KEY`.

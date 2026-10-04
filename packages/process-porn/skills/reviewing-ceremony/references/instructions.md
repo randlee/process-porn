@@ -6,7 +6,7 @@ CLAUDE.md, AGENTS.md, `SKILL.md` files, and agent prompt files (`.claude/agents/
 
 ## Context to collect
 
-Each item states one fact, cites its source path, and is one line. Don't judge rules here; Jev does that.
+Each item states one fact, cites its source path, and is one line. Collect facts only; don't classify the rules.
 
 1. **Who loads each file and when.**
    - CLAUDE.md and AGENTS.md: every session in the repo.
@@ -34,9 +34,14 @@ python3 <script> instructions <files...> --context <file> --brief 240
 
 ## Reading results
 
-| Reason | Meaning |
-|---|---|
-| `remove_narration` | History, incident stories, purpose sections, excess rationale or restatement. Every line costs context on every load. |
-| `remove_ungated_artifact`, `remove_meta_review` | The file tells the agent to keep a ledger, report or review round that nothing consumes. |
-| `fix_gate_weakening` | The file tells the agent to skip, weaken or self-certify a gate. |
-| `keep_reference` on a missing path | Fix the path. This is a stale reference, not ceremony. |
+- `unit` is the file. `where` is the heading path to the item, and `lines` are line numbers in the file.
+
+| Pattern | Jev matched | Fact that settles it |
+|---|---|---|
+| `narration` | History, incident stories, purpose sections, excess rationale or restatement | Whether the rule appears in another file loaded in the same session (step 3) |
+| `ungated_artifact` | An instruction to keep a ledger, report or other artifact | Whether anything reads or gates on it |
+| `meta_review` | A mandated review or approval round about the process | Whether the round can block the work |
+| `gate_weakening` | An instruction to skip, weaken or self-certify a gate | Whether a hook or script enforces the gate (step 2) |
+| `stale_reference` | A path or command the context records as missing | The `missing` line in step 4 |
+
+`clear` covers instructions and references that change what the agent does.
