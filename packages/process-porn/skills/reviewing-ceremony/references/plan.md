@@ -16,17 +16,17 @@ Record only what a command printed. Under each heading, list the commands you ra
 
 1. **Phase goal.** Take the opening paragraph of the phase plan or README, up to about 1,000 bytes.
 2. **Tools that read plan fields.** These stop data that tools read from being flagged as narration.
-   - For each `Label:` in the sprint's metadata lists, search the repo's tooling, skipping `docs/`:
+   - For each `Label:` in the sprint's metadata lists, search the repo's tooling directories (scripts, `.claude/`, `.github/`, whichever exist), skipping documentation:
      ```bash
-     rg -l --fixed-strings '<Label>' scripts .claude .github
+     grep -rlF '<Label>' <tooling dirs>
      ```
    - Open each hit and classify it:
      - **parsed:** code, a schema or a template that reads the value. Record `<Label>: parsed by <path>`.
      - **mentioned:** prose that only talks about the field. Record `<Label>: mentioned in <path>, not parsed`.
    - For a label with no hits, record `<Label>: no reader found`.
 3. **Fields the bead already holds.** If the md plan also has sprint beads, list each bead's metadata keys as `plan-beads.md` describes. Record `<bead id>: metadata holds <keys>`. A field present in both the md and the bead is a duplicate.
-4. **Out-of-scope owners.** For each sprint named in an out-of-scope or "does not close" section, record whether it exists in the phase: `d-32: exists in phase` or `d-32: not found`.
-5. **Validation commands.** For each command in the sprint's required-validation section, record whether CI or a gate runs it: `cargo clippy ...: run by .github/workflows/ci.yml` or `not run by CI`.
+4. **Out-of-scope owners.** For each sprint named in an out-of-scope or "does not close" section, record whether it exists in the phase: `<sprint>: exists in phase` or `<sprint>: not found`.
+5. **Validation commands.** For each command in the sprint's required-validation section, record whether CI or a gate runs it: `<command>: run by <workflow file>` or `<command>: not run by CI`.
 
 ## Context file
 

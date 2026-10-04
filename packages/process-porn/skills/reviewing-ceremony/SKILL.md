@@ -40,14 +40,15 @@ Invoke the `ceremony-review` agent with the Task tool, passing:
 - `category`;
 - `reference`: the absolute path of the matching reference;
 - `inputs`;
-- any options the reference names.
+- any options the reference names, such as the `instructions` scope;
+- `max_requests`: optional, default 100.
 
-The agent collects the context the reference describes, runs the script, and returns fenced JSON. Treat unfenced or malformed JSON as a failure.
+The agent sizes the run first. If it needs more Jev requests than `max_requests`, the agent returns the size per unit without running. Report it, then narrow the inputs or raise `max_requests` as the user decides. Otherwise the agent collects the context the reference describes, runs the script, and returns fenced JSON. Treat unfenced or malformed JSON as a failure.
 
 ## Step 3: Review the findings
 
 The result has, per unit:
-- `findings`: items whose pattern probability reached the threshold (0.8). Each has `where`, `lines`, `pattern` (the top pattern), `pattern_probability` (the sum over all patterns), `patterns` (each pattern's own probability, if 0.05 or more) and the start of `text`. Bead findings also have `field`.
+- `findings`: items whose pattern probability reached the threshold (0.8). Each has `where`, `lines`, `pattern` (the top pattern), `pattern_probability` (the sum over all patterns), `patterns` (each pattern's own probability, rounded, listing only those at 0.05 or more, so the values need not add up to `pattern_probability`) and the start of `text`. Bead findings also have `field`.
 - `uncertain`: items that reached the threshold neither as a pattern nor as clear. They carry the same fields plus `clear_probability` and `insufficient_probability`.
 - `clear`: the count of items Jev classified as clear.
 

@@ -71,7 +71,8 @@ SITUATIONS = {
             "Gates build, lint or test the product and their failure blocks a merge or release; release items build or publish a shipped artifact; "
             "support is setup a gate or release job needs. The patterns are: reports, summaries, badges, uploads and notifications that nothing gates on; "
             "work that another job or step already does for the same trigger; checks whose failure blocks nothing; and items that let failures pass "
-            "(continue-on-error, skip conditions, path filters or retries that hide red)."
+            "(continue-on-error, skip conditions, path filters or retries that hide red). "
+            "A step that continues on error is not gate weakening when state.caller_context records a later step that fails the job on its outcome."
         ),
         "instructions": "Choose the description that best fits item {id} (state.items.{id}) of the CI workflow in state.unit, using state.rules and state.context.",
         "clear": ("gate", "release", "support"),
@@ -262,6 +263,42 @@ def load_beads(path):
             if bead.get(field) is not None and not isinstance(bead[field], str):
                 raise JevError("VALIDATION.INPUT", f"Bead {bead['id']} field {field} must be a string")
     return beads
+
+
+SCOPES = ("local", "global", "both")
+
+
+def scope_roots(scope, root):
+    """Instruction roots for a scope: local is the repository, global is ~/.claude."""
+    local, home = Path(root), Path.home() / ".claude"
+    return {"local": [local], "global": [home], "both": [local, home]}[scope]
+
+
+def instruction_files(scope, root):
+    """CLAUDE.md and AGENTS.md at each root, skill markdown (SKILL.md and references) and agent prompts; symlinks followed, duplicates dropped."""
+    found, seen = [], set()
+
+    def add(path):
+        real = os.path.realpath(path)
+        if os.path.isfile(real) and real not in seen:
+            seen.add(real)
+            found.append(Path(path))
+
+    for base in scope_roots(scope, root):
+        claude = base if base.name == ".claude" else base / ".claude"
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            add(base / name)
+        for sub in ("skills", "agents"):
+            for dirpath, _, files in sorted(os.walk(claude / sub, followlinks=True)):
+                for name in sorted(files):
+                    if name.endswith(".md"):
+                        add(Path(dirpath) / name)
+    return found
+
+
+def in_scope(path, scope, root):
+    real = Path(os.path.realpath(path))
+    return any(real.is_relative_to(Path(os.path.realpath(r))) for r in scope_roots(scope, root))
 
 
 # ---------- ci units ----------
@@ -527,6 +564,13 @@ def collect_units(args):
         if args.situation != "plan" or args.inputs:
             raise JevError("VALIDATION.INPUT", "--beads-json applies to the plan situation and replaces the input paths")
         return [plan_unit_from_bead(b) for b in load_beads(args.beads_json)]
+    if args.situation == "instructions":
+        if args.scope is None:
+            raise JevError("VALIDATION.INPUT", "instructions needs --scope local, global or both")
+        outside = [str(p) for p in args.inputs if not in_scope(p, args.scope, args.root)]
+        if outside:
+            raise JevError("VALIDATION.INPUT", f"Inputs outside the {args.scope} scope: {', '.join(outside)}")
+        args.inputs = args.inputs or instruction_files(args.scope, args.root)
     if not args.inputs:
         raise JevError("VALIDATION.INPUT", "No inputs given")
     return [u for p in args.inputs for u in md_units(p, args.situation, args.sprint_level)]
@@ -552,6 +596,8 @@ def main(argv=None):
                         help="plan: sprint md files; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
     parser.add_argument("--beads-json", metavar="FILE", help="plan: bead JSON from `bd show --json` or `br show --json`, a file or - for stdin")
     parser.add_argument("--sprint-level", type=int, help="plan md: each heading at this level starts a sprint (default: one sprint per file)")
+    parser.add_argument("--scope", choices=SCOPES, help="instructions: local (the repository), global (~/.claude) or both; required. Without inputs, reviews every CLAUDE.md, AGENTS.md, skill and agent file in the scope")
+    parser.add_argument("--root", default=".", help="instructions: repository root for the local scope (default: current directory)")
     parser.add_argument("--context", type=Path, help=f"caller-collected context file (at most {CALLER_CONTEXT_BYTES} bytes), sent with every request")
     parser.add_argument("--minimum-probability", type=float, default=0.8)
     parser.add_argument("--dry-run", action="store_true", help="print units, item counts and request sizes; no Jev call")
@@ -560,9 +606,12 @@ def main(argv=None):
     try:
         units = load_units(args)
         if args.dry_run:
-            data = {"units": [{"unit": u["id"], "items": len(u["items"]),
-                               "requests": [len(encode(build_request(args.situation, u, b))) for b in batches(args.situation, u)]}
-                              for u in units]}
+            rows = [{"unit": u["id"], "source": u["source"], "items": len(u["items"]),
+                     "requests": [len(encode(build_request(args.situation, u, b))) for b in batches(args.situation, u)]}
+                    for u in units]
+            data = {"units": rows, "totals": {"units": len(rows), "items": sum(r["items"] for r in rows),
+                                              "requests": sum(len(r["requests"]) for r in rows),
+                                              "bytes": sum(sum(r["requests"]) for r in rows)}}
         else:
             key = api_key()
             reports = [review_unit(args.situation, u, key, minimum_probability=args.minimum_probability) for u in units]
@@ -572,7 +621,8 @@ def main(argv=None):
                 for entry in (e for r in reports for k in ("findings", "uncertain") for e in r[k]):
                     if len(entry["text"]) > args.brief:
                         entry["text"] = entry["text"][:args.brief] + "…"
-            data = {"situation": args.situation, "units": reports, "totals": totals}
+            data = {"situation": args.situation, "context_file": str(args.context) if args.context else None,
+                    "units": reports, "totals": totals}
         result = {"success": True, "data": data, "error": None}
     except JevError as exc:
         result = failure(exc.code, exc.message, exc.recoverable)

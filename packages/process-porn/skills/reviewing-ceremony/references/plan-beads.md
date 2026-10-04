@@ -40,14 +40,14 @@ Pipe the `show` output to the script unchanged. If you need to say which CLI pro
   "source": "bd",
   "beads": [
     {
-      "id": "obs-d-31",
-      "title": "d-31: sc-otel cli",
+      "id": "proj-12",
+      "title": "s-3: config parser",
       "issue_type": "feature",
-      "description": "## Goal\nShip the `sc-otel` binary ...",
+      "description": "## Goal\nParse the config file into typed settings ...",
       "design": "## Relations\n...",
       "acceptance_criteria": "- [ ] boundary:BOUNDARY-ScOtelCli: ...",
       "notes": "",
-      "metadata": {"branch": "sprint/d-31-sc-otel-cli", "difficulty": "normal"}
+      "metadata": {"branch": "feature/config-parser"}
     }
   ]
 }

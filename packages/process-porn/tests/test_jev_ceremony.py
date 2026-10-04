@@ -118,7 +118,7 @@ class BeadInputTests(unittest.TestCase):
                     jc.load_beads(self.write(d, value))
 
     def test_beads_json_excludes_paths(self):
-        args = jc.argparse.Namespace(situation="plan", inputs=["a.md"], beads_json="-", sprint_level=None, context=None)
+        args = jc.argparse.Namespace(situation="plan", inputs=["a.md"], beads_json="-", sprint_level=None, context=None, scope=None, root=".")
         with self.assertRaises(jc.JevError):
             jc.load_units(args)
 
@@ -137,6 +137,37 @@ class CiTests(unittest.TestCase):
         ])
         self.assertIn("ci.yml test: Test", unit["context"])
         self.assertNotIn("checkout", unit["context"].split("All reviewed jobs:")[1])
+
+
+class ScopeTests(unittest.TestCase):
+    def tree(self, d):
+        root = Path(d) / "repo"
+        (root / ".claude/skills/s/references").mkdir(parents=True)
+        (root / ".claude/agents").mkdir()
+        for rel in ("CLAUDE.md", ".claude/skills/s/SKILL.md", ".claude/skills/s/references/r.md", ".claude/agents/a.md", ".claude/skills/s/x.py"):
+            (root / rel).write_text("# t\nline\n")
+        return root
+
+    def args(self, root, scope, inputs=()):
+        return jc.argparse.Namespace(situation="instructions", inputs=list(inputs), beads_json=None, sprint_level=None,
+                                     context=None, scope=scope, root=str(root))
+
+    def test_local_scope_finds_instruction_markdown(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = self.tree(d)
+            names = sorted(str(p.relative_to(root)) for p in jc.instruction_files("local", root))
+        self.assertEqual(names, [".claude/agents/a.md", ".claude/skills/s/SKILL.md", ".claude/skills/s/references/r.md", "CLAUDE.md"])
+
+    def test_scope_required_and_inputs_must_be_inside(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = self.tree(d)
+            with self.assertRaises(jc.JevError):
+                jc.load_units(self.args(root, None))
+            outside = Path(d) / "other.md"
+            outside.write_text("x\n")
+            with self.assertRaises(jc.JevError):
+                jc.load_units(self.args(root, "local", [outside]))
+            self.assertEqual(len(jc.load_units(self.args(root, "local", [root / "CLAUDE.md"]))), 1)
 
 
 class PackingTests(unittest.TestCase):
@@ -170,7 +201,7 @@ class CallerContextTests(unittest.TestCase):
             doc, ctx = Path(d) / "s.md", Path(d) / "ctx.md"
             doc.write_text(PLAN)
             ctx.write_text("scripts/dispatch.py reads Branch:")
-            args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads_json=None, sprint_level=None, context=ctx)
+            args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads_json=None, sprint_level=None, context=ctx, scope=None, root=".")
             unit = jc.load_units(args)[0]
         for batch in jc.batches("plan", unit):
             self.assertEqual(jc.build_request("plan", unit, batch)["state"]["caller_context"], "scripts/dispatch.py reads Branch:")
