@@ -10,7 +10,7 @@ tools: Bash, Read, Write, Grep, Glob
 
 ## Invocation
 
-The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't invoke it directly.
+The `reviewing-ceremony` skill invokes this agent through the Task tool. Where subagents aren't available, as in Codex, the skill's caller follows these steps itself.
 
 ## Inputs
 
@@ -27,7 +27,8 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
 2. Locate the script.
    - If `script` is given, use it.
    - If `CLAUDE_PLUGIN_ROOT` is set, use `$CLAUDE_PLUGIN_ROOT/scripts/jev_ceremony.py`.
-   - Otherwise run `find .claude ~/.claude -name jev_ceremony.py` and use the newest match.
+   - Otherwise use `scripts/jev_ceremony.py` in this plugin's root, two directories above the skill's directory (`skills/reviewing-ceremony/../../scripts/`).
+   - Otherwise run `find .claude ~/.claude ~/.codex/plugins -name jev_ceremony.py` and use the newest match.
    - If there is no match, return `REGISTRY.RESOLUTION`.
 3. Size the run: the reference's command with `--dry-run` in place of `--context` and `--brief`. If `data.totals.requests` exceeds `max_requests`, return the dry-run JSON and stop.
 4. Collect the context exactly as the reference's "Context to collect" section says.

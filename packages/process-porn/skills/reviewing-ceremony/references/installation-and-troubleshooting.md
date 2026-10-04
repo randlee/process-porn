@@ -27,10 +27,11 @@ done
 
   The script uses the standard library only.
 - **bd (beads)** or **br (beads_rust):** follow https://github.com/steveyegge/beads or https://github.com/Dicklesworthstone/beads_rust. Either one is needed only for plan reviews of beads.
-- **TYPESAFE_API_KEY:** get a key from TypeSafe, then export it in the shell that launches Claude Code:
+- **TYPESAFE_API_KEY:** get a key from TypeSafe (https://typesafe.ai), then export it in the shell that launches Claude Code or Codex:
   ```bash
   export TYPESAFE_API_KEY=...
   ```
+  Codex may withhold variables whose names contain `KEY` from the commands it runs. If the skill reports the key missing under Codex, allow it in `~/.codex/config.toml` under `[shell_environment_policy]`.
 
 ## Minimum Version
 
@@ -48,10 +49,10 @@ export PATH="/opt/homebrew/bin:$PATH"   # adjust to the directory found above
 ## Validation
 
 ```bash
-python3 "$CLAUDE_PLUGIN_ROOT/scripts/jev_ceremony.py" instructions CLAUDE.md --dry-run
+python3 <plugin root>/scripts/jev_ceremony.py instructions --scope local CLAUDE.md --dry-run
 ```
 
-This needs no key and makes no network call. It prints the units and request sizes.
+`<plugin root>` is `$CLAUDE_PLUGIN_ROOT` in Claude Code, or two directories above the skill's directory. This needs no key and makes no network call. It prints the units and request sizes.
 
 ## Known Issues
 

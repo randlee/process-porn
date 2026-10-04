@@ -36,7 +36,7 @@ If python3 is still missing, or the key is unset, read `references/installation-
 
 If a plan exists both as md and as beads, review the copy the repo treats as the source. Read only the matching reference. A request that spans categories runs once per category.
 
-Invoke the `ceremony-review` agent with the Task tool, passing:
+In Claude Code, invoke the `ceremony-review` agent with the Task tool. Where no such agent is available, as in Codex, follow `../../agents/ceremony-review.md` (relative to this skill's directory) yourself. Pass:
 - `category`;
 - `reference`: the absolute path of the matching reference;
 - `inputs`;

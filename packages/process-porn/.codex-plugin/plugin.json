@@ -1,0 +1,27 @@
+{
+  "name": "process-porn",
+  "version": "0.2.0",
+  "description": "Locate likely ceremony in sprint plans (md or beads), CI workflows and agent instructions with the TypeSafe Jev agent. Requires TYPESAFE_API_KEY.",
+  "author": {
+    "name": "randlee"
+  },
+  "homepage": "https://github.com/randlee/process-porn",
+  "repository": "https://github.com/randlee/process-porn",
+  "license": "MIT",
+  "keywords": ["jev", "typesafe", "ceremony", "review", "ci", "plans"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "process-porn",
+    "shortDescription": "Locate ceremony in plans, CI and agent instructions with TypeSafe Jev",
+    "longDescription": "The reviewing-ceremony skill routes each item of a sprint plan (md or beads), CI workflow, or CLAUDE.md, AGENTS.md, skill or agent prompt to the TypeSafe Jev agent, which classifies it against named ceremony patterns. You get the locations of likely ceremony to review against your repo's own guidelines. Requires a TYPESAFE_API_KEY.",
+    "developerName": "randlee",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Classify sprint plan items (md files or bd/br beads) against ceremony patterns",
+      "Classify CI workflow jobs and steps",
+      "Classify CLAUDE.md, AGENTS.md, skill and agent prompt items, by local, global or both scopes"
+    ],
+    "websiteURL": "https://typesafe.ai",
+    "defaultPrompt": "Use $reviewing-ceremony to review this repo's CI workflows for ceremony."
+  }
+}
