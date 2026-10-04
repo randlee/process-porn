@@ -1,0 +1,16 @@
+{
+  "name": "process-porn",
+  "description": "Jev-backed ceremony check: splits a document into sections, asks Jev typed Choice questions about process artifacts, gate weakening, follow-up laundering and the meta-trap, and aggregates a verdict in code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "randlee"
+  },
+  "license": "MIT",
+  "keywords": [
+    "jev",
+    "typesafe",
+    "ceremony",
+    "process",
+    "review"
+  ]
+}
