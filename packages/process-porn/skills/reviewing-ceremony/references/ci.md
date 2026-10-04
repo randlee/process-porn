@@ -2,7 +2,13 @@
 
 ## Inputs
 
-This category covers GitHub Actions workflows. Pass every workflow file under `.github/workflows/`, both `.yml` and `.yaml`, so the script can see jobs that are duplicated across workflows. `gh` is needed for step 1 below; check it with `which gh && gh auth status`.
+This category covers GitHub Actions workflows. Pass every workflow file under `.github/workflows/`, both `.yml` and `.yaml`, so the script can see jobs that are duplicated across workflows:
+
+```bash
+find .github/workflows -name '*.yml' -o -name '*.yaml'
+```
+
+`<workflow files...>` below means that list. `gh` is needed for step 1 below; check it with `which gh && gh auth status`.
 
 ## Context to collect
 
@@ -21,10 +27,27 @@ Record only what a command printed. Under each heading, list the commands you ra
    grep -rnE 'uses: \./\.github/workflows/<file>|gh workflow run <file>' .github <tooling dirs>
    ```
    `<tooling dirs>` are the repo's script directories, if any. A workflow with only `workflow_dispatch` and no caller is run by hand; record `<file>: manual only`.
-3. **Artifact consumers.** For each `upload-artifact` name, record which workflow or job downloads it, or `<name>: no download found`.
-4. **Release flow.** For each job, record whether a publish or release job has it under `needs:`: `<job>: needed by <job>`.
-5. **Deferred failure.** For each job with `continue-on-error` or `if: always()` steps, record whether a later step in the job reads those steps' outcomes (`steps.<id>.outcome`, `job.status`, `failure()`) and exits non-zero: `<job>: <step> fails the job on collected outcomes`, or `<job>: no step fails on collected outcomes`.
-6. **Stated CI policy.** Record any one-line CI rules from the repo's instruction files (CLAUDE.md, AGENTS.md, CONTRIBUTING.md), quoted with their path.
+3. **Artifact consumers.** List the upload and download names and patterns:
+   ```bash
+   grep -nE -A8 'actions/(upload|download)-artifact@' <workflow files...> | grep -E 'artifact@| name:| pattern:'
+   ```
+   For each upload name, record which workflow or job downloads it (by name or matching pattern), or `<name>: no download found`.
+4. **Dependencies and duplicate commands.**
+   - For each publish or release job, record the jobs under its `needs:`: `<job>: needed by <job>`.
+   - List the one-line commands that appear more than once:
+     ```bash
+     grep -hE '^[[:space:]]+(- )?run: ' <workflow files...> | sed -E 's/^[[:space:]]+(- )?run: //' | sort | uniq -d
+     ```
+     For each, find where it runs (`grep -nF '<command>' <workflow files...>`) and record `<command>: run by <job>, <job>`, adding `<job> needs <job>` when one of those jobs needs the other.
+5. **Deferred failure.** Find the steps that continue on error and the steps that read outcomes:
+   ```bash
+   grep -nE 'continue-on-error|if: .*always\(\)|steps\.[A-Za-z0-9_-]+\.outcome|job\.status|failure\(\)' <workflow files...>
+   ```
+   For each job with such steps, record whether a later step reads their outcomes and exits non-zero: `<job>: <step> fails the job on collected outcomes`, or `<job>: no step fails on collected outcomes`.
+6. **Stated CI policy.** Record any one-line CI rules from the repo's instruction files (CLAUDE.md, AGENTS.md, CONTRIBUTING.md) and from any CI policy document, quoted with their path. Find candidate policy documents by their headings, then open the ones whose title is about CI:
+   ```bash
+   grep -rlE '^#+ .*(\bCI\b|continuous integration)' --include='*.md' --exclude-dir='.*' --exclude-dir=node_modules .
+   ```
 
 ## Context file
 
@@ -45,7 +68,7 @@ Exit 0 means no findings, 1 means findings were reported, 2 means an error.
 
 | Pattern | Jev matched | Fact that settles it |
 |---|---|---|
-| `redundant` | Another job or step runs the same work for the same trigger | Which copy is a required check (step 1), or needed by a release job (step 4) |
+| `redundant` | Another job or step runs the same work for the same trigger | The duplicate commands (step 4). The copy in a job that needs the other job is the duplicate; otherwise, which copy is a required check (step 1) or needed by a release job (step 4) |
 | `report_only` | A report, summary, badge, upload or notification | Whether anything downloads or gates on it (step 3) |
 | `unconsumed_check` | A check whose failure blocks nothing | Whether it is a required check (step 1) or called by another workflow (step 2). With no required checks and no other merge gate, every check matches, so this pattern carries little signal |
 | `gate_weakening` | `continue-on-error`, skip conditions, path filters or retries that let failures pass | Whether a later step fails the job on the collected outcomes (step 5), the stated CI policy (step 6), and the branches the condition covers |

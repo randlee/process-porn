@@ -1,3 +1,4 @@
+import io
 import json
 from pathlib import Path
 import sys
@@ -81,7 +82,7 @@ class MarkdownTests(unittest.TestCase):
         text = "# Phase\nintro\n## s-1\none\n## s-2\ntwo\n"
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "plan.md"
-            path.write_text(text)
+            path.write_text(text, encoding="utf-8")
             units = jc.md_units(path, "plan", sprint_level=2)
         self.assertEqual([u["title"] for u in units], ["Phase", "s-1", "s-2"])
         self.assertEqual(units[2]["items"][0]["start"], 6)
@@ -100,7 +101,7 @@ class MarkdownTests(unittest.TestCase):
 class BeadInputTests(unittest.TestCase):
     def write(self, d, value):
         path = Path(d) / "beads.json"
-        path.write_text(json.dumps(value))
+        path.write_text(json.dumps(value), encoding="utf-8")
         return path
 
     def test_bare_list_and_wrapped_object(self):
@@ -110,6 +111,16 @@ class BeadInputTests(unittest.TestCase):
                 self.assertEqual([b["id"] for b in jc.load_beads(self.write(d, value))], ["x-1"])
         unit = jc.plan_unit_from_bead(bead)
         self.assertIn("Metadata keys: branch", unit["context"])
+
+    def test_stdin_is_read_as_utf8_whatever_the_locale(self):
+        raw = json.dumps([{"id": "x-1", "description": "Gate \u2192 merge"}], ensure_ascii=False).encode("utf-8")
+        saved = sys.stdin
+        sys.stdin = io.TextIOWrapper(io.BytesIO(raw), encoding="cp1252")
+        try:
+            beads = jc.load_beads("-")
+        finally:
+            sys.stdin = saved
+        self.assertEqual(beads[0]["description"], "Gate \u2192 merge")
 
     def test_bad_shapes_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -127,7 +138,7 @@ class CiTests(unittest.TestCase):
     def test_header_jobs_and_steps(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "ci.yml"
-            path.write_text(WORKFLOW)
+            path.write_text(WORKFLOW, encoding="utf-8")
             unit = jc.ci_unit(path, jc.ci_inventory([path]))
         got = [(i["path"], i["start"], i["end"]) for i in unit["items"]]
         self.assertEqual(got, [
@@ -145,7 +156,7 @@ class ScopeTests(unittest.TestCase):
         (root / ".claude/skills/s/references").mkdir(parents=True)
         (root / ".claude/agents").mkdir()
         for rel in ("CLAUDE.md", ".claude/skills/s/SKILL.md", ".claude/skills/s/references/r.md", ".claude/agents/a.md", ".claude/skills/s/x.py"):
-            (root / rel).write_text("# t\nline\n")
+            (root / rel).write_text("# t\nline\n", encoding="utf-8")
         return root
 
     def args(self, root, scope, inputs=()):
@@ -155,7 +166,7 @@ class ScopeTests(unittest.TestCase):
     def test_local_scope_finds_instruction_markdown(self):
         with tempfile.TemporaryDirectory() as d:
             root = self.tree(d)
-            names = sorted(str(p.relative_to(root)) for p in jc.instruction_files("local", root))
+            names = sorted(p.relative_to(root).as_posix() for p in jc.instruction_files("local", root))
         self.assertEqual(names, [".claude/agents/a.md", ".claude/skills/s/SKILL.md", ".claude/skills/s/references/r.md", "CLAUDE.md"])
 
     def test_scope_required_and_inputs_must_be_inside(self):
@@ -164,7 +175,7 @@ class ScopeTests(unittest.TestCase):
             with self.assertRaises(jc.JevError):
                 jc.load_units(self.args(root, None))
             outside = Path(d) / "other.md"
-            outside.write_text("x\n")
+            outside.write_text("x\n", encoding="utf-8")
             with self.assertRaises(jc.JevError):
                 jc.load_units(self.args(root, "local", [outside]))
             self.assertEqual(len(jc.load_units(self.args(root, "local", [root / "CLAUDE.md"]))), 1)
@@ -199,8 +210,8 @@ class CallerContextTests(unittest.TestCase):
     def test_context_reaches_every_request(self):
         with tempfile.TemporaryDirectory() as d:
             doc, ctx = Path(d) / "s.md", Path(d) / "ctx.md"
-            doc.write_text(PLAN)
-            ctx.write_text("scripts/dispatch.py reads Branch:")
+            doc.write_text(PLAN, encoding="utf-8")
+            ctx.write_text("scripts/dispatch.py reads Branch:", encoding="utf-8")
             args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads_json=None, sprint_level=None, context=ctx, scope=None, root=".")
             unit = jc.load_units(args)[0]
         for batch in jc.batches("plan", unit):
@@ -209,7 +220,7 @@ class CallerContextTests(unittest.TestCase):
     def test_oversize_context_refused(self):
         with tempfile.TemporaryDirectory() as d:
             ctx = Path(d) / "ctx.md"
-            ctx.write_text("x" * (jc.CALLER_CONTEXT_BYTES + 1))
+            ctx.write_text("x" * (jc.CALLER_CONTEXT_BYTES + 1), encoding="utf-8")
             with self.assertRaises(jc.JevError):
                 jc.load_caller_context(ctx)
 
@@ -218,7 +229,7 @@ class ReportTests(unittest.TestCase):
     def test_plan_report_lists_findings_by_pattern(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "s.md"
-            path.write_text(PLAN)
+            path.write_text(PLAN, encoding="utf-8")
             unit = jc.md_units(path, "plan")[0]
         pick = lambda t: "ungated_artifact" if "ledger" in t else "gate_weakening" if "unit tests" in t else "capability"
         report = jc.review_unit("plan", unit, "k", stub(pick))

@@ -248,7 +248,7 @@ def plan_unit_from_bead(bead):
 
 def load_beads(path):
     """Read bead objects from a file or '-' (stdin): a bare list, or {"source": "bd"|"br", "beads": [...]}."""
-    raw = sys.stdin.read() if str(path) == "-" else Path(path).read_text(encoding="utf-8")
+    raw = sys.stdin.buffer.read().decode("utf-8") if str(path) == "-" else Path(path).read_text(encoding="utf-8")
     try:
         data = json.loads(raw)
     except ValueError:

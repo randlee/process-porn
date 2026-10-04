@@ -22,4 +22,4 @@ It needs python3 and `TYPESAFE_API_KEY`. See [the skill](packages/process-porn/s
 python3 -m unittest discover -s packages/process-porn/tests
 ```
 
-The tests use a stub transport. They cover item extraction, request packing, response validation and the report, not Jev's judgment.
+CI runs them on Linux, macOS and Windows, with Python 3.9 and the latest 3.x. The tests use a stub transport. They cover item extraction, request packing, response validation and the report, not Jev's judgment.
