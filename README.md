@@ -19,7 +19,7 @@ Both install the same package, `packages/process-porn`: the `reviewing-ceremony`
 
 | Need | For | Notes |
 |---|---|---|
-| `TYPESAFE_API_KEY` | every review | Never printed or returned by the skill. Under Codex, make sure the shell environment policy passes it through (`[shell_environment_policy]` in `~/.codex/config.toml`). |
+| `TYPESAFE_API_KEY` | every review | Never printed or returned by the skill. Codex passes it to commands by default; if you restrict `[shell_environment_policy]`, keep `ignore_default_excludes = true` and, with an allowlist under `[shell_environment_policy.filters]`, add `"TYPESAFE_API_KEY" = "include"`. |
 | python3 3.9+ | every review | Standard library only. |
 | `gh`, authenticated | `ci` | Reads branch rules and required checks. Read-only. |
 | `bd` ([beads](https://github.com/steveyegge/beads)) or `br` ([beads_rust](https://github.com/Dicklesworthstone/beads_rust)) | `plan` from beads | Read-only `show` and `list`. |
@@ -66,9 +66,9 @@ The skill routes by category. Each category has a reference that says what to pa
 
   | Scope | Roots |
   |---|---|
-  | `local` | the repository's `CLAUDE.md`, `AGENTS.md`, `.claude/skills/`, `.claude/agents/` |
-  | `global` | `~/.claude` |
-  | `both` | both; a file reached through both by symlink is reviewed once |
+  | `local` | the repository's `CLAUDE.md` and `AGENTS.md`, and `skills/` and `agents/` under `.claude/`, `.codex/` and `.agents/` |
+  | `global` | `~/.claude`, the Codex home (`$CODEX_HOME`, default `~/.codex`) and `~/.agents` |
+  | `both` | all of the above; a file reached twice by symlink is reviewed once |
 
 - **Items:** as for markdown plans.
 - **Context collected:** who loads each file; rules a hook or script already enforces; other files loaded in the same session (to spot restatement); whether referenced paths, skills and agents exist.

@@ -31,7 +31,7 @@ done
   ```bash
   export TYPESAFE_API_KEY=...
   ```
-  Codex may withhold variables whose names contain `KEY` from the commands it runs. If the skill reports the key missing under Codex, allow it in `~/.codex/config.toml` under `[shell_environment_policy]`.
+  Codex passes `KEY` variables to the commands it runs by default. If you have restricted its shell environment in `config.toml`, keep `ignore_default_excludes = true` under `[shell_environment_policy]`, and if you use `[shell_environment_policy.filters]` as an allowlist, add `"TYPESAFE_API_KEY" = "include"`.
 
 ## Minimum Version
 
@@ -52,7 +52,7 @@ export PATH="/opt/homebrew/bin:$PATH"   # adjust to the directory found above
 python3 <plugin root>/scripts/jev_ceremony.py instructions --scope local CLAUDE.md --dry-run
 ```
 
-`<plugin root>` is `$CLAUDE_PLUGIN_ROOT` in Claude Code, or two directories above the skill's directory. This needs no key and makes no network call. It prints the units and request sizes.
+`<plugin root>` is two directories above the skill's directory (`$CLAUDE_PLUGIN_ROOT` in Claude Code). This needs no key and makes no network call. It prints the units and request sizes.
 
 ## Known Issues
 
