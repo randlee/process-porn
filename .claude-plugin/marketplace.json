@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "process-porn",
+  "description": "Skills and scripts that use the TypeSafe Jev agent to flag unnecessary process and ceremony in plans and documents.",
+  "owner": {
+    "name": "randlee"
+  },
+  "plugins": [
+    {
+      "name": "process-porn",
+      "description": "reviewing-ceremony: per-category Jev review of sprint plans, CI workflows and agent instructions; locates items that match a ceremony pattern.",
+      "author": {
+        "name": "randlee"
+      },
+      "category": "workflow",
+      "source": "./packages/process-porn",
+      "homepage": "https://github.com/randlee/process-porn"
+    }
+  ]
+}

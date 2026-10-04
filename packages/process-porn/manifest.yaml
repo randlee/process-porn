@@ -1,0 +1,34 @@
+name: process-porn
+version: 0.2.0
+description: >
+  Jev-backed ceremony review of sprint plans (md or beads), CI workflows and agent instructions.
+  A router skill picks the category; the agent collects that category's context, routes one
+  typed Choice question per item to Jev, and returns the items that match a ceremony pattern.
+author: randlee
+license: MIT
+tags:
+  - jev
+  - typesafe
+  - ceremony
+  - review
+
+# Files to install (relative to package root)
+artifacts:
+  skills:
+    - skills/reviewing-ceremony/SKILL.md
+    - skills/reviewing-ceremony/references/plan.md
+    - skills/reviewing-ceremony/references/plan-beads.md
+    - skills/reviewing-ceremony/references/ci.md
+    - skills/reviewing-ceremony/references/instructions.md
+    - skills/reviewing-ceremony/references/installation-and-troubleshooting.md
+  agents:
+    - agents/ceremony-review.md
+  scripts:
+    - scripts/jev_ceremony.py
+
+# Runtime requirements
+requires:
+  cli:
+    - python3
+  env:
+    - TYPESAFE_API_KEY

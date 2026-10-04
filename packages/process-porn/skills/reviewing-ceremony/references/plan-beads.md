@@ -1,0 +1,93 @@
+# Category: plan (beads)
+
+Use this reference for plans stored as beads. Use `plan.md` for plans in markdown files.
+
+## Inputs
+
+One or more sprint beads, from either CLI:
+
+| CLI | Check | One sprint |
+|---|---|---|
+| `bd` (beads) | `which bd && bd --version` | `bd show <id> --json` |
+| `br` (beads_rust) | `which br && br --version` | `br show <id> --json` |
+
+To get every sprint under a phase root:
+- **bd:** list the children, then show them:
+  ```bash
+  bd list --parent <root> --all --json        # prints a JSON list
+  bd show <ids...> --json
+  ```
+- **br:** `br list` has no `--parent` option. Child ids are dotted (`<root>.1`), and the list is wrapped in an object:
+  ```bash
+  br list --all --limit 0 --json | python3 -c 'import json,sys; r=sys.argv[1]; print(" ".join(i["id"] for i in json.load(sys.stdin)["issues"] if i["id"].startswith(r+".") and "." not in i["id"][len(r)+1:]))' <root>
+  br show <ids...> --json
+  ```
+
+Always pass ids explicitly. A bare `br show` falls back to the last-touched bead.
+
+A phase root's children can include beads that are not sprint plans: sanity, QA or review siblings, and closed planning beads. Pass only the beads that describe a sprint's work, chosen by `issue_type` and title, not by id pattern. Report the beads you set aside, with why.
+
+`bd show` and `br show` both print a JSON list of issue objects with `id`, `title`, `issue_type`, `description`, `design`, `acceptance_criteria` and `notes`. Only `bd` adds `metadata`. Fetch full content with `show`, because `list` output can omit the text fields (`bd list --brief` always does).
+
+- Use read-only commands only: no `update`, `close`, `sync`, `config` or `init`.
+
+## Bead JSON
+
+Pipe the `show` output to the script unchanged. If you need to say which CLI produced it, or to combine output from several calls, wrap the list in an object:
+
+```json
+{
+  "source": "bd",
+  "beads": [
+    {
+      "id": "proj-12",
+      "title": "s-3: config parser",
+      "issue_type": "feature",
+      "description": "## Goal\nParse the config file into typed settings ...",
+      "design": "## Relations\n...",
+      "acceptance_criteria": "- [ ] boundary:BOUNDARY-ScOtelCli: ...",
+      "notes": "",
+      "metadata": {"branch": "feature/config-parser"}
+    }
+  ]
+}
+```
+
+The script accepts:
+- a bare list, as `bd show --json` prints it;
+- the wrapped object above.
+
+Field rules:
+- `id` is required.
+- `title`, `description`, `design`, `acceptance_criteria` and `notes` must be strings if present. They are reviewed item by item, and each entry's `field` says which one an item came from.
+- The `metadata` keys (bd only) go into the unit's context, so Jev can see that a field the text restates is already held as data.
+
+If your CLI's JSON names these fields differently, map them to the names above before piping. Never pass the text as some other key: anything else is ignored.
+
+## Context file
+
+Write the file as `plan.md` describes, with these steps:
+
+1. **Phase goal:** from the phase root bead's description, or the phase README.
+2. **Tools that read bead fields:** for each metadata key, search tooling as `plan.md` step 2 does, with the key in place of `<Label>`. Record `<key>: parsed by <path>`, `mentioned in <path>, not parsed`, or `no reader found`.
+3. **Fields the bead already holds:** the script sends each bead's metadata keys to Jev, so skip this step.
+4. **Out-of-scope owners:** for each sprint named as owning out-of-scope work, record whether its bead exists under the phase root.
+5. **Validation commands:** for each command named in the bead text, record whether CI or a gate runs it. If the beads name none, record `no validation commands named`.
+
+The 8,000-byte limit still applies.
+
+## Run
+
+```bash
+bd show <ids...> --json | python3 <script> plan --beads-json - --context <file> --brief 240
+br show <ids...> --json | python3 <script> plan --beads-json - --context <file> --brief 240
+```
+
+Only stdout is piped, so CLI warnings on stderr don't reach the script. Exit 0 means no findings, 1 means findings were reported, 2 means an error.
+
+To combine several calls, write the wrapped object to a file and pass `--beads-json <file>`. Don't also pass input paths: `--beads-json` replaces them.
+
+## Reading results
+
+- `unit` is the bead id. `field` is the bead field the item came from, and `lines` are 1-based within that field's text. `where` starts with the field name, followed by the heading path inside it.
+- The patterns are the same as in `plan.md`'s results table. Metadata keys were in Jev's context, so `narration` on text that restates a key means Jev saw the key held as data.
