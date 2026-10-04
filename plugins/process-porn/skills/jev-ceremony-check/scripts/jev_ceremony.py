@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Score a document's sections for process ceremony with the TypeSafe Jev agent.
+"""Find what to remove from sprint plans, CI workflows and agent instructions with the TypeSafe Jev agent.
 
-The document is split on markdown headings, then on paragraphs, so every Jev
-request stays under MAX_REQUEST_BYTES. Every section is asked the same Choice
-questions; the verdict is computed here from the answers, never by Jev.
+Each unit (one sprint, one workflow file, or one instruction file) is routed to
+Jev on its own. Every item in the unit (a list item, paragraph, table row or
+code block of markdown; the header, a job or a step of a workflow) gets one
+Choice question whose answer is the action to take. Items are packed into
+requests under MAX_REQUEST_BYTES with the unit's context repeated in each
+request. The report is computed here from the answers.
 """
 import argparse
 import http.client
@@ -13,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import subprocess
 import sys
 import time
 
@@ -21,54 +25,84 @@ HOST = "api.typesafe.ai"
 PATH = "/v1/systemone"
 MAX_REQUEST_BYTES = 24000  # Conservative transport bound, not a vendor token count.
 MAX_RESPONSE_BYTES = 1048576
+MAX_QUESTIONS = 12
+CONTEXT_BYTES = 6000
+ROUNDING = 0.005
+CI_INVENTORY_BYTES = 12000
 
-RULES = (
+CORE = (
     "Purpose of agent work: working, deployable capability. Process serves that outcome and is never the product. "
     "Boundary test: if running code branches on an artifact, it is product state; if only people or status reports read it, it is process. "
     "Code written only so that something branches on the artifact does not count. "
     "A process artifact (certificate, ledger, dashboard, matrix, meta-report, readiness review, conformance check, review round) is justified "
     "only when it names all four: a concrete consumer, the gate it enforces, an observed (not speculative) defect class, and a retirement condition. "
     "An explicit operator request counts as consumer and gate. A minimal crash-recovery or provenance control that prevents a named data-loss mode is allowed. "
-    "Smells: new ledgers or dashboards while delivered features stay flat; closing items with refusal or error paths only; "
-    "test, validator or gate changes inside feature work; mocks, fixtures or self-review presented as live proof; "
-    "in-scope acceptance split into follow-up items so the original can close; governance or schema review rounds about the process apparatus itself."
 )
 
-YES_NO = {"yes": "the section clearly does this", "no": "the section clearly does not",
-          "insufficient": "the section does not contain enough to tell"}
-
-QUESTIONS = {
-    "artifact_gate": {
-        "instructions": "Apply the boundary test and the four-part justification to this section only. Does it create or require a process artifact, and is that artifact justified?",
+SITUATIONS = {
+    "plan": {
+        "rules": CORE + (
+            "You are reviewing one sprint plan, item by item. Keep items that tell the implementer what to build, how it must behave, "
+            "which interfaces and paths it touches, or which real tests and validation commands must pass. "
+            "Naming work that is out of scope and owned by another named sprint is scope, not follow-up laundering. "
+            "Remove ungated process artifacts, review or governance rounds about the process itself, and narration: history, provenance, "
+            "rationale, status or restatement that gives the implementer no instruction and that nothing checks. "
+            "Fix, rather than remove, items that weaken or self-certify a test or gate, accept mocks or self-review as live proof, "
+            "or move in-scope acceptance into a follow-up so the sprint can close."
+        ),
+        "instructions": "Classify item {id} (state.items.{id}) of the sprint plan in state.unit, using state.rules and state.context. Choose the one action the plan author should take for this item.",
         "criteria": {
-            "none": "no process artifact is created or required",
-            "justified": "a process artifact is required and the section names consumer, gate, observed defect and retirement, or an operator request",
-            "unjustified": "a process artifact is required without all four parts",
-            "insufficient": "the section does not contain enough to tell",
+            "keep_capability": "specifies behavior, interfaces, code, data, owned paths or a test of real behavior the sprint delivers",
+            "keep_justified_process": "a process step or validation command that runs and blocks merge, or names consumer, gate, observed defect and retirement",
+            "remove_ungated_artifact": "creates or requires a process artifact without consumer, gate, observed defect and retirement",
+            "remove_meta_review": "a review, governance or schema round about the process apparatus rather than the deliverable",
+            "remove_narration": "history, provenance, rationale, status or restatement that instructs no one and that nothing checks",
+            "fix_gate_weakening": "weakens, bypasses or self-certifies a test or gate, or accepts mocks or self-review as live proof",
+            "fix_follow_up_laundering": "moves in-scope acceptance into a follow-up so the sprint can close",
+            "insufficient": "the item and context are not enough to tell",
         },
-        "flag": ["unjustified"],
     },
-    "capability_share": {
-        "instructions": "Rank this section by what it spends its words on: specifying or delivering working capability, or describing process around the work.",
+    "ci": {
+        "rules": CORE + (
+            "You are reviewing one CI workflow file, item by item: the workflow header (triggers, permissions, concurrency), each job, each step. "
+            "state.context lists every job in every reviewed workflow so you can see duplication. "
+            "Keep what builds, lints or tests the product when its failure blocks a merge or release, what builds or publishes a shipped artifact, "
+            "and setup that a kept job needs. Remove reports, summaries, badges, uploads and notifications that nothing gates on, work that another "
+            "job or step already does for the same trigger, and checks whose failure blocks nothing. "
+            "Fix, rather than remove, items that let failures pass: continue-on-error, skip conditions, path filters or retries that hide red."
+        ),
+        "instructions": "Classify item {id} (state.items.{id}) of the CI workflow in state.unit, using state.rules and state.context. Choose the one action the workflow owner should take for this item.",
         "criteria": {
-            "capability": "mostly capability: behavior, interfaces, code, tests of real behavior",
-            "mixed": "capability and process in similar measure",
-            "process": "mostly process: tracking, reporting, approvals, reviews, status",
-            "insufficient": "the section does not contain enough to tell",
+            "keep_gate": "builds, lints or tests the product and its failure blocks merge or release",
+            "keep_release": "builds, signs or publishes a shipped artifact",
+            "keep_support": "triggers, permissions or setup (checkout, toolchain, cache) that a kept job needs",
+            "remove_report_only": "produces a report, summary, badge, upload or notification that nothing gates on",
+            "remove_redundant": "repeats work that another job or step in state.context already does for the same trigger",
+            "remove_unconsumed_check": "a check whose failure blocks nothing",
+            "fix_gate_weakening": "continue-on-error, skip conditions, path filters or retries that let failures pass",
+            "insufficient": "the item and context are not enough to tell",
         },
-        "flag": [],  # Informational: a rules document is process by nature; that alone is not ceremony.
     },
-    "gate_weakening": {
-        "instructions": "Does this section weaken, bypass or self-certify a test or gate, or accept mocks, fixtures or self-review as proof of live behavior?",
-        "criteria": YES_NO, "flag": ["yes"],
-    },
-    "follow_up_laundering": {
-        "instructions": "Does this section move in-scope acceptance conditions into follow-up items so the original item can close?",
-        "criteria": YES_NO, "flag": ["yes"],
-    },
-    "meta_trap": {
-        "instructions": "Does this section add review, governance or schema rounds about the process apparatus itself rather than about the deliverable?",
-        "criteria": YES_NO, "flag": ["yes"],
+    "instructions": {
+        "rules": CORE + (
+            "You are reviewing one agent instruction file (CLAUDE.md, AGENTS.md, a skill or an agent prompt), item by item. "
+            "Every item costs context on every run of the agent that loads it. Keep items that change what the agent does: a rule with its trigger, "
+            "a step, a command, a path, a format, a limit, or a pointer to a file the agent must read. "
+            "Remove items that tell the agent to create or maintain an ungated process artifact, that mandate review or governance rounds about the "
+            "process itself, and narration: history, incident stories, purpose or motivation sections, rationale beyond what the rule needs, "
+            "and restatement of a rule already given. "
+            "Fix, rather than remove, items that tell the agent to weaken, skip or self-certify tests or gates, or to accept mocks or self-review as live proof."
+        ),
+        "instructions": "Classify item {id} (state.items.{id}) of the instruction file in state.unit, using state.rules and state.context. Choose the one action the file's author should take for this item.",
+        "criteria": {
+            "keep_instruction": "a rule, step, constraint or trigger that changes what the agent does",
+            "keep_reference": "a command, path, format, limit or pointer the agent needs to act",
+            "remove_ungated_artifact": "tells the agent to create or maintain a process artifact without consumer, gate, observed defect and retirement",
+            "remove_meta_review": "mandates a review, governance or approval round about the process rather than the work",
+            "remove_narration": "history, incident story, purpose, motivation, excess rationale or restatement that changes no action",
+            "fix_gate_weakening": "tells the agent to weaken, skip or self-certify tests or gates, or accept mocks or self-review as live proof",
+            "insufficient": "the item and context are not enough to tell",
+        },
     },
 }
 
@@ -79,19 +113,222 @@ class JevError(Exception):
         self.code, self.message, self.recoverable = code, message, recoverable
 
 
-def api_key():
-    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
-    if not key:
-        raise JevError("JEV.UNAVAILABLE", "TYPESAFE_API_KEY is missing; no Jev evaluation ran", True)
-    if not key.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in key):
-        raise JevError("JEV.UNAVAILABLE", "TYPESAFE_API_KEY has invalid formatting")
-    return key
+def cap(text, limit=CONTEXT_BYTES):
+    data = text.encode("utf-8")
+    return text if len(data) <= limit else data[:limit].decode("utf-8", "ignore") + "\n[context truncated]"
 
 
-def build_request(document, section):
-    questions = {qid: {"type": "choice", "instructions": q["instructions"], "criteria": q["criteria"]}
-                 for qid, q in QUESTIONS.items()}
-    state = {"rules": RULES, "document": document, "section_path": section["path"], "section": section["text"]}
+# ---------- markdown units (plan, instructions) ----------
+
+HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+LIST_START = re.compile(r"^ ?([-*+]|\d+[.)])\s")
+TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}")
+
+
+def md_items(lines, first_line=1, prefix=""):
+    """Split markdown lines into items with heading paths and 1-based line ranges."""
+    items, stack, cur, fence, table_head = [], [], None, False, None
+
+    def close():
+        nonlocal cur
+        if cur and any(l.strip() for l in cur["lines"]):
+            items.append(cur)
+        cur = None
+
+    def start(n, kind, line):
+        nonlocal cur
+        close()
+        path = " > ".join(h for _, h in stack) or "(preamble)"
+        cur = {"path": (prefix + " > " + path) if prefix else path, "kind": kind, "start": n, "end": n, "lines": [line]}
+
+    for n, line in enumerate(lines, first_line):
+        if fence:
+            cur["lines"].append(line)
+            cur["end"] = n
+            if line.lstrip().startswith("```"):
+                fence = False
+                close()
+            continue
+        if line.lstrip().startswith("```"):
+            start(n, "code", line)
+            fence = True
+            continue
+        match = HEADING.match(line)
+        if match:
+            close()
+            table_head = None
+            level = len(match.group(1))
+            stack[:] = [(lvl, h) for lvl, h in stack if lvl < level] + [(level, match.group(2))]
+            continue
+        if not line.strip():
+            close()
+            table_head = None
+            continue
+        if line.lstrip().startswith("|"):
+            if TABLE_SEP.match(line):
+                continue
+            if table_head is None:
+                close()
+                table_head = line
+                continue
+            start(n, "table_row", table_head + "\n" + line)
+            close()
+            continue
+        if LIST_START.match(line):
+            start(n, "list_item", line)
+        elif cur is None:
+            start(n, "paragraph", line)
+        else:
+            cur["lines"].append(line)
+            cur["end"] = n
+    close()
+    return [{"path": i["path"], "kind": i["kind"], "start": i["start"], "end": i["end"], "text": "\n".join(i["lines"])} for i in items]
+
+
+def outline(lines):
+    return "Outline:\n" + "\n".join(l.strip() for l in lines if HEADING.match(l))
+
+
+def plan_context(lines):
+    """Heading outline plus the goal/deliverable/scope sections, capped."""
+    picked, keep = [], False
+    for line in lines:
+        match = HEADING.match(line)
+        if match:
+            keep = bool(re.search(r"goal|deliverable|scope", match.group(2), re.I))
+        if keep:
+            picked.append(line)
+    return cap(outline(lines) + "\n\nGoal and deliverables:\n" + "\n".join(picked))
+
+
+def instructions_context(lines):
+    """Heading outline plus the text before the first second-level heading (frontmatter, title, intro), capped."""
+    first_h2 = next((i for i, l in enumerate(lines) if (m := HEADING.match(l)) and len(m.group(1)) >= 2), len(lines))
+    return cap(outline(lines) + "\n\nOpening:\n" + "\n".join(lines[:first_h2]))
+
+
+def md_units(path, situation, sprint_level=None):
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    spans = [(0, len(lines))]
+    if situation == "plan" and sprint_level:
+        starts = [i for i, l in enumerate(lines) if (m := HEADING.match(l)) and len(m.group(1)) == sprint_level]
+        bounds = ([0] if starts[:1] != [0] else []) + starts + [len(lines)]
+        spans = [(a, b) for a, b in zip(bounds, bounds[1:]) if any(l.strip() for l in lines[a:b])]
+    context = plan_context if situation == "plan" else instructions_context
+    units = []
+    for a, b in spans:
+        chunk = lines[a:b]
+        title = next((HEADING.match(l).group(2) for l in chunk if HEADING.match(l)), Path(path).name)
+        units.append({"id": f"{Path(path).name}:{title}", "title": title, "source": str(path),
+                      "context": context(chunk), "items": md_items(chunk, a + 1)})
+    return units
+
+
+BEAD_FIELDS = ("description", "design", "acceptance_criteria", "notes")
+
+
+def plan_unit_from_bead(bead):
+    title = bead.get("title", "")
+    items, fields = [], []
+    for field in BEAD_FIELDS:
+        lines = (bead.get(field) or "").splitlines()
+        items += [dict(i, field=field) for i in md_items(lines, 1, field)]
+        fields.append(f"{field}: " + "; ".join(l.strip() for l in lines if HEADING.match(l)))
+    context = cap(f"Title: {title}\nOutline:\n" + "\n".join(fields) + "\n\nDescription:\n" + (bead.get("description") or ""))
+    return {"id": bead["id"], "title": title, "source": f"bead {bead['id']}", "context": context, "items": items}
+
+
+def read_bead(bead_id):
+    try:
+        proc = subprocess.run(["bd", "show", bead_id, "--json"], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        raise JevError("VALIDATION.INPUT", f"bd show {bead_id} failed or timed out") from None
+    if proc.returncode:
+        raise JevError("VALIDATION.INPUT", f"bd show {bead_id} exited {proc.returncode}")
+    data = json.loads(proc.stdout)
+    return data[0] if isinstance(data, list) else data
+
+
+# ---------- ci units ----------
+
+KEY = re.compile(r"^(\s*)([\w.-]+):")
+
+
+def indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def ci_structure(lines):
+    """Return (header range, [(job, job range, header end, [(step label, range)])]) as 0-based half-open ranges."""
+    jobs_at = next((i for i, l in enumerate(lines) if re.match(r"^jobs:\s*(#.*)?$", l)), None)
+    if jobs_at is None:
+        return (0, len(lines)), []
+    body = [i for i in range(jobs_at + 1, len(lines)) if lines[i].strip() and not lines[i].lstrip().startswith("#")]
+    end_jobs = next((i for i in body if indent(lines[i]) == 0), len(lines))
+    body = [i for i in body if i < end_jobs]
+    if not body:
+        return (0, jobs_at + 1), []
+    job_indent = indent(lines[body[0]])
+    starts = [i for i in body if indent(lines[i]) == job_indent and KEY.match(lines[i])]
+    jobs = []
+    for a, b in zip(starts, starts[1:] + [end_jobs]):
+        name = KEY.match(lines[a]).group(2)
+        steps_at = next((i for i in range(a + 1, b) if re.match(r"^\s+steps:\s*$", lines[i])), None)
+        steps = []
+        if steps_at is not None:
+            dash = [i for i in range(steps_at + 1, b) if lines[i].lstrip().startswith("- ")]
+            if dash:
+                step_indent = indent(lines[dash[0]])
+                sstarts = [i for i in dash if indent(lines[i]) == step_indent]
+                for k, (s, e) in enumerate(zip(sstarts, sstarts[1:] + [b])):
+                    label = next((m.group(1) for l in lines[s:e] if (m := re.match(r"^\s*-?\s*(?:name|uses|run):\s*(.+)$", l))), "")
+                    steps.append((f"steps[{k}] {label}".strip(), (s, e)))
+        jobs.append((name, (a, b), steps_at + 1 if steps_at is not None else b, steps))
+    return (0, jobs_at + 1), jobs
+
+
+def ci_unit(path, inventory):
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    (ha, hb), jobs = ci_structure(lines)
+
+    def item(where, a, b, kind):
+        while b > a and not lines[b - 1].strip():
+            b -= 1
+        return {"path": where, "kind": kind, "start": a + 1, "end": b, "text": "\n".join(lines[a:b])}
+
+    items = [item("workflow header", ha, hb, "header")]
+    for name, (a, b), header_end, steps in jobs:
+        items.append(item(f"jobs.{name}", a, header_end, "job"))
+        items += [item(f"jobs.{name}.{label}", s, e, "step") for label, (s, e) in steps]
+    context = cap("This workflow's header:\n" + "\n".join(lines[ha:hb]) + "\n\nAll reviewed jobs:\n" + inventory, CI_INVENTORY_BYTES + CONTEXT_BYTES)
+    return {"id": Path(path).name, "title": Path(path).name, "source": str(path), "context": context, "items": items}
+
+
+SETUP_STEP = re.compile(r"^(actions/(checkout|cache|setup-[\w-]+|upload-artifact|download-artifact)|[\w-]+/[\w-]*toolchain)@")
+
+
+def ci_inventory(paths):
+    """One line per job: workflow, job id and its non-setup steps."""
+    rows = []
+    for path in paths:
+        _, jobs = ci_structure(Path(path).read_text(encoding="utf-8").splitlines())
+        for name, _, _, steps in jobs:
+            labels = [label.split(" ", 1)[-1] for label, _ in steps]
+            rows.append(f"{Path(path).name} {name}: " + "; ".join(l for l in labels if not SETUP_STEP.match(l)))
+    return "\n".join(rows)
+
+
+# ---------- requests ----------
+
+def build_request(situation, unit, items):
+    spec = SITUATIONS[situation]
+    state = {"rules": spec["rules"], "situation": situation,
+             "unit": {"id": unit["id"], "title": unit["title"], "source": unit["source"]},
+             "context": unit["context"],
+             "items": {i["qid"]: {"where": f"{i['path']} (lines {i['start']}-{i['end']})", "text": i["text"]} for i in items}}
+    questions = {i["qid"]: {"type": "choice", "instructions": spec["instructions"].format(id=i["qid"]), "criteria": spec["criteria"]}
+                 for i in items}
     return {"model": MODEL, "state": state, "questions": questions}
 
 
@@ -99,53 +336,35 @@ def encode(request):
     return json.dumps(request, allow_nan=False).encode("utf-8")
 
 
-def split_sections(text):
-    """Split markdown into heading-scoped sections, each carrying its heading path."""
-    sections, stack, lines = [], [], []
-
-    def flush():
-        body = "\n".join(lines).strip()
-        if any(not re.match(r"^#{1,6}\s", l) for l in body.splitlines() if l.strip()):
-            sections.append({"path": " > ".join(h for _, h in stack) or "(preamble)", "text": body})
-        lines.clear()
-
-    fence = False
-    for line in text.splitlines():
-        if line.lstrip().startswith("```"):
-            fence = not fence
-        match = None if fence else re.match(r"^(#{1,6})\s+(.*\S)\s*$", line)
-        if match:
-            flush()
-            level = len(match.group(1))
-            stack[:] = [(lvl, h) for lvl, h in stack if lvl < level] + [(level, match.group(2))]
-        lines.append(line)
-    flush()
-    return sections
+def split_item(item):
+    lines = item["text"].splitlines()
+    if len(lines) < 2:
+        raise JevError("JEV.INCONCLUSIVE", f"A single line at {item['path']} line {item['start']} exceeds {MAX_REQUEST_BYTES} bytes; split it by hand without dropping content")
+    half = len(lines) // 2
+    head = dict(item, qid=item["qid"] + "a", end=item["start"] + half - 1, text="\n".join(lines[:half]))
+    tail = dict(item, qid=item["qid"] + "b", start=item["start"] + half, text="\n".join(lines[half:]))
+    return [head, tail]
 
 
-def fit_sections(document, sections, limit=MAX_REQUEST_BYTES):
-    """Split any section whose request exceeds the limit on paragraph, then line, boundaries."""
-    fitted = []
-    for section in sections:
-        pending = [section["text"]]
-        part = 0
-        while pending:
-            text = pending.pop(0)
-            candidate = {"path": section["path"], "text": text}
-            if len(encode(build_request(document, candidate))) <= limit:
-                part += 1
-                fitted.append(candidate)
-                continue
-            pieces = re.split(r"\n\s*\n", text) if "\n\n" in text else text.splitlines()
-            if len(pieces) < 2:
-                raise JevError("JEV.INCONCLUSIVE", f"A single line in '{section['path']}' exceeds {limit} bytes; split it by hand without dropping content")
-            half = len(pieces) // 2
-            sep = "\n\n" if "\n\n" in text else "\n"
-            pending[:0] = [sep.join(pieces[:half]), sep.join(pieces[half:])]
-        if part > 1:
-            for i, s in enumerate(fitted[-part:], 1):
-                s["path"] = f"{section['path']} (part {i}/{part})"
-    return fitted
+def batches(situation, unit, limit=MAX_REQUEST_BYTES, max_questions=MAX_QUESTIONS):
+    """Pack the unit's items into requests; oversize items are split on lines, nothing is dropped."""
+    pending = [dict(i, qid=f"i{n}") for n, i in enumerate(unit["items"], 1)]
+    out, cur = [], []
+    while pending:
+        item = pending.pop(0)
+        if len(cur) < max_questions and len(encode(build_request(situation, unit, cur + [item]))) <= limit:
+            cur.append(item)
+            continue
+        if cur:
+            out.append(cur)
+            cur = []
+        if len(encode(build_request(situation, unit, [item]))) <= limit:
+            cur = [item]
+        else:
+            pending[:0] = split_item(item)
+    if cur:
+        out.append(cur)
+    return out
 
 
 def probability(value):
@@ -160,20 +379,42 @@ def validate_response(value, request):
         raise JevError("JEV.RESPONSE_INVALID", "Missing or unexpected answer IDs")
     for qid, question in request["questions"].items():
         answer, options = answers[qid], set(question["criteria"])
-        probs = answer.get("probabilities") if isinstance(answer, dict) else None
-        if (not isinstance(answer, dict) or answer.get("type") != "choice"
-                or answer.get("choice") not in options
-                or not probability(answer.get("confidence"))
-                or not isinstance(probs, dict) or set(probs) != options
-                or not all(probability(p) for p in probs.values())
-                or abs(sum(probs.values()) - 1) > 0.001):
-            raise JevError("JEV.RESPONSE_INVALID", f"Invalid Choice answer for {qid}")
+        problem = answer_problem(answer, options)
+        if problem:
+            raise JevError("JEV.RESPONSE_INVALID", f"Invalid Choice answer for {qid}: {problem}")
     return value
+
+
+def answer_problem(answer, options):
+    if not isinstance(answer, dict) or answer.get("type") != "choice":
+        return "not a choice answer"
+    if answer.get("choice") not in options:
+        return f"choice {answer.get('choice')!r} is not an option"
+    if not probability(answer.get("confidence")):
+        return "confidence is not a probability"
+    probs = answer.get("probabilities")
+    if not isinstance(probs, dict) or set(probs) != options:
+        return "probability keys differ from the options"
+    if not all(probability(p) for p in probs.values()):
+        return "a probability is out of range"
+    total = sum(probs.values())
+    if abs(total - 1) > ROUNDING * len(options):  # Jev rounds each probability to two decimals.
+        return f"probabilities sum to {total:.4f}"
+    return None
+
+
+def api_key():
+    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    if not key:
+        raise JevError("JEV.UNAVAILABLE", "TYPESAFE_API_KEY is missing; no Jev evaluation ran", True)
+    if not key.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in key):
+        raise JevError("JEV.UNAVAILABLE", "TYPESAFE_API_KEY has invalid formatting")
+    return key
 
 
 def post(body, key):
     for attempt in range(2):
-        conn = http.client.HTTPSConnection(HOST, timeout=30)
+        conn = http.client.HTTPSConnection(HOST, timeout=60)
         try:
             conn.request("POST", PATH, body=body, headers={
                 "Authorization": "Bearer " + key, "Content-Type": "application/json"})
@@ -210,63 +451,79 @@ def evaluate(request, key, transport=post):
     return validate_response(transport(body, key), request)
 
 
-def score_section(section, answers, minimum_probability):
-    flags, low = [], []
-    for qid, spec in QUESTIONS.items():
-        answer = answers[qid]
-        choice = answer["choice"]
-        prob = answer["probabilities"][choice]
-        if not spec["flag"]:
-            continue
-        if prob < minimum_probability or choice == "insufficient":
-            low.append(qid)
-        elif choice in spec["flag"]:
-            flags.append(qid)
-    status = "ceremony" if flags else "needs_context" if low else "clean"
-    return {"path": section["path"], "status": status, "flags": flags, "low_confidence": low,
-            "answers": {qid: {"choice": a["choice"], "probability": a["probabilities"][a["choice"]]}
-                        for qid, a in answers.items()}}
+# ---------- report ----------
+
+def decide(probs):
+    """Pick the action group (keep, remove, fix, insufficient) with the most probability, then its top reason."""
+    groups, total = {}, sum(probs.values()) or 1
+    for option, p in ((o, p / total) for o, p in probs.items()):
+        groups.setdefault(option.split("_", 1)[0], []).append((p, option))
+    action = max(groups, key=lambda g: sum(p for p, _ in groups[g]))
+    return action, max(groups[action])[1], sum(p for p, _ in groups[action])
 
 
-def aggregate(results):
-    counts = {s: sum(r["status"] == s for r in results) for s in ("ceremony", "needs_context", "clean")}
-    verdict = "ceremony" if counts["ceremony"] else "needs_context" if counts["needs_context"] else "clean"
-    return {"verdict": verdict, "sections": len(results), "counts": counts, "results": results}
+def review_unit(situation, unit, key, transport=post, minimum_probability=0.8):
+    report = {"unit": unit["id"], "source": unit["source"], "remove": [], "fix": [], "needs_context": [], "kept": 0}
+    for batch in batches(situation, unit):
+        answers = evaluate(build_request(situation, unit, batch), key, transport)["answers"]
+        for item in batch:
+            action, reason, prob = decide(answers[item["qid"]]["probabilities"])
+            entry = {"item": item["qid"], "where": item["path"], "lines": [item["start"], item["end"]],
+                     "action": action, "reason": reason, "probability": round(prob, 3), "text": item["text"]}
+            if "field" in item:
+                entry["field"] = item["field"]
+            if action == "insufficient" or prob < minimum_probability:
+                report["needs_context"].append(entry)
+            elif action == "keep":
+                report["kept"] += 1
+            else:
+                report[action].append(entry)
+    return report
 
 
-def run(path, minimum_probability=0.8, transport=post, key=None):
-    text = Path(path).read_text(encoding="utf-8")
-    sections = fit_sections(Path(path).name, split_sections(text))
-    if not sections:
-        raise JevError("VALIDATION.INPUT", "Document has no content")
-    key = key if key is not None else api_key()
-    results = [score_section(s, evaluate(build_request(Path(path).name, s), key, transport)["answers"], minimum_probability)
-               for s in sections]
-    return aggregate(results)
+def load_units(args):
+    if args.situation == "ci":
+        inventory = cap(ci_inventory(args.inputs), CI_INVENTORY_BYTES)
+        return [ci_unit(p, inventory) for p in args.inputs]
+    if args.beads:
+        if args.situation != "plan":
+            raise JevError("VALIDATION.INPUT", "--beads applies to the plan situation only")
+        return [plan_unit_from_bead(read_bead(str(b))) for b in args.inputs]
+    return [u for p in args.inputs for u in md_units(p, args.situation, args.sprint_level)]
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("document", type=Path)
+    parser.add_argument("situation", choices=sorted(SITUATIONS))
+    parser.add_argument("inputs", nargs="+",
+                        help="plan: sprint md files, or bead ids with --beads; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
+    parser.add_argument("--beads", action="store_true", help="plan inputs are bead ids, read with `bd show <id> --json`")
+    parser.add_argument("--sprint-level", type=int, help="plan md: each heading at this level starts a sprint (default: one sprint per file)")
     parser.add_argument("--minimum-probability", type=float, default=0.8)
-    parser.add_argument("--dry-run", action="store_true", help="print the split sections and request sizes; no Jev call")
+    parser.add_argument("--dry-run", action="store_true", help="print units, item counts and request sizes; no Jev call")
     args = parser.parse_args(argv)
     try:
+        units = load_units(args)
         if args.dry_run:
-            name = args.document.name
-            sections = fit_sections(name, split_sections(args.document.read_text(encoding="utf-8")))
-            data = {"sections": [{"path": s["path"], "request_bytes": len(encode(build_request(name, s)))} for s in sections]}
+            data = {"units": [{"unit": u["id"], "items": len(u["items"]),
+                               "requests": [len(encode(build_request(args.situation, u, b))) for b in batches(args.situation, u)]}
+                              for u in units]}
         else:
-            data = run(args.document, args.minimum_probability)
+            key = api_key()
+            reports = [review_unit(args.situation, u, key, minimum_probability=args.minimum_probability) for u in units]
+            totals = {k: sum(len(r[k]) for r in reports) for k in ("remove", "fix", "needs_context")}
+            totals["kept"] = sum(r["kept"] for r in reports)
+            data = {"situation": args.situation, "units": reports, "totals": totals}
         result = {"success": True, "data": data, "error": None}
     except JevError as exc:
         result = {"success": False, "data": None, "error": {"code": exc.code, "message": exc.message, "recoverable": exc.recoverable}}
-    except (OSError, UnicodeError):
-        result = {"success": False, "data": None, "error": {"code": "VALIDATION.INPUT", "message": "Document unavailable or not UTF-8", "recoverable": False}}
+    except (OSError, UnicodeError, ValueError):
+        result = {"success": False, "data": None, "error": {"code": "VALIDATION.INPUT", "message": "Input unavailable or unreadable", "recoverable": False}}
     print(json.dumps(result, indent=2, allow_nan=False))
     if not result["success"]:
         return 2
-    return 1 if result["data"].get("verdict") == "ceremony" else 0
+    totals = result["data"].get("totals", {})
+    return 1 if totals.get("remove") or totals.get("fix") else 0
 
 
 if __name__ == "__main__":

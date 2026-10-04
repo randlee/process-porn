@@ -10,7 +10,12 @@ Skills and scripts for TypeSafe Jev agent to unnecessary process and ceremony
 
 ## Skills
 
-- `jev-ceremony-check` scores a markdown document section by section with typed Jev Choice questions. It covers ungated process artifacts, process-heavy sections, gate weakening, follow-up laundering and the meta-trap, and it computes the verdict in code. It needs `TYPESAFE_API_KEY`. See [the skill](plugins/process-porn/skills/jev-ceremony-check/SKILL.md).
+- `jev-ceremony-check` reviews three kinds of input, item by item, with typed Jev Choice questions:
+  - sprint plans (md files or beads);
+  - CI workflows;
+  - agent instructions (CLAUDE.md, AGENTS.md, skills, agent prompts).
+
+  For each one it reports exactly which lines to remove or fix, and why. It needs `TYPESAFE_API_KEY`. See [the skill](plugins/process-porn/skills/jev-ceremony-check/SKILL.md).
 
 ## Tests
 
@@ -18,4 +23,4 @@ Skills and scripts for TypeSafe Jev agent to unnecessary process and ceremony
 python3 -m unittest discover -s plugins/process-porn/skills/jev-ceremony-check/tests
 ```
 
-The tests use a stub transport. They cover splitting, response validation and verdict aggregation, not Jev's judgment.
+The tests use a stub transport. They cover item extraction, request packing, response validation and the report, not Jev's judgment.

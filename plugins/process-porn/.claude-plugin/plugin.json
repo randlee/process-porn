@@ -1,6 +1,6 @@
 {
   "name": "process-porn",
-  "description": "Jev-backed ceremony check: splits a document into sections, asks Jev typed Choice questions about process artifacts, gate weakening, follow-up laundering and the meta-trap, and aggregates a verdict in code.",
+  "description": "Jev-backed ceremony review of sprint plans (md or beads), CI workflows and agent instructions: one typed Choice question per item, routed per sprint or file, reporting exact lines to remove or fix.",
   "version": "0.1.0",
   "author": {
     "name": "randlee"

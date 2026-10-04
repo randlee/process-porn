@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "process-porn",
-      "description": "jev-ceremony-check: scores a document's sections against the ceremony rules with typed Jev questions and aggregates the answers in code.",
+      "description": "jev-ceremony-check: per-item Jev review of sprint plans, CI workflows and agent instructions; reports exactly what to remove or fix.",
       "author": {
         "name": "randlee"
       },

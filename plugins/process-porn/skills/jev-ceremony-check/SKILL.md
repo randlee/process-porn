@@ -1,50 +1,54 @@
 ---
 name: jev-ceremony-check
-description: Score a plan, sprint doc or other markdown document for unnecessary process and ceremony with the TypeSafe Jev agent. Use when asked to check a document for process porn, ceremony, ungated process artifacts, gate weakening, follow-up laundering or governance loops.
+description: Find exactly what to remove or fix in sprint plans (md files or beads), CI workflows, and agent instructions (CLAUDE.md, AGENTS.md, skills, agent prompts) with the TypeSafe Jev agent. Use when asked to review any of these for process porn, ceremony, ungated process artifacts, narration, redundant or report-only CI, or gate weakening.
 ---
 
 # jev-ceremony-check
 
-Run:
-
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/jev-ceremony-check/scripts/jev_ceremony.py" <document.md>
+J="${CLAUDE_PLUGIN_ROOT}/skills/jev-ceremony-check/scripts/jev_ceremony.py"
+python3 "$J" plan docs/plans/phase-x/sprint-*.md        # one sprint per file
+python3 "$J" plan plan.md --sprint-level 2              # each H2 starts a sprint
+python3 "$J" plan --beads <sprint-bead-id>...           # read with `bd show <id> --json`
+python3 "$J" ci .github/workflows/*.yml                 # pass every workflow, so redundancy is visible
+python3 "$J" instructions CLAUDE.md AGENTS.md .claude/skills/*/SKILL.md .claude/agents/*.md
 ```
 
-This needs `TYPESAFE_API_KEY` in the environment. `--dry-run` prints the sections and request sizes without calling Jev. `--minimum-probability` (default 0.8) sets the confidence below which an answer counts as `needs_context`.
+This needs `TYPESAFE_API_KEY` in the environment.
+- `--dry-run` prints the units, item counts and request sizes without calling Jev.
+- `--minimum-probability` (default 0.8) sets the confidence below which an item goes to `needs_context`.
 
-## What it does
+## Routing
 
-1. Splits the document on markdown headings. Any section whose request would exceed 24,000 bytes is split again on paragraphs, then on lines, and its parts are labelled `(part i/n)`. Nothing is dropped. A single line over the limit is refused with `JEV.INCONCLUSIVE`.
-2. Sends each section to Jev with the ceremony rules (the `RULES` constant) and five Choice questions:
+- **Unit:** one sprint, one workflow file, or one instruction file. Each unit is reviewed on its own.
+- **Item:** one Choice question per item. For markdown, an item is a list item with its continuation lines, a paragraph, a table row (with its header) or a code block. For a workflow, it's the header, one job, or one step.
+- **Context**, repeated in every request for the unit:
 
-   | id | Flags on |
-   |---|---|
-   | `artifact_gate` | a process artifact without consumer, gate, observed defect and retirement |
-   | `capability_share` | nothing; informational (a rules document is process by nature) |
-   | `gate_weakening` | weakened or self-certified tests or gates, or mocks as live proof |
-   | `follow_up_laundering` | in-scope acceptance moved to follow-ups so the original can close |
-   | `meta_trap` | review or governance rounds about the process apparatus itself |
+  | Situation | Context |
+  |---|---|
+  | plan | heading outline plus the goal, deliverables and scope sections |
+  | ci | the workflow's header plus every reviewed job with its non-setup steps |
+  | instructions | heading outline plus the text before the first H2 |
 
-3. Computes the verdict in code:
-   - a section is `ceremony` if any answer flags it;
-   - otherwise it is `needs_context` if any answer is `insufficient` or below the minimum probability;
-   - otherwise it is `clean`.
+  For beads, the context is the title, the field outlines and the description.
+- **Packing:** items go into requests of at most 12 questions and 24,000 bytes. An item too large on its own is split on lines into `a`/`b` parts. Nothing is dropped.
 
-   The document verdict is the worst section verdict.
+## Report
 
-## Output and exit codes
-
-The output is JSON: `{"success", "data": {"verdict", "sections", "counts", "results": [...]}, "error"}`. Each result gives the section path, its status, the flagged question ids, the low-confidence ids, and each choice with its probability.
+Each unit gets `remove`, `fix` and `needs_context` lists, plus a `kept` count.
+- Every entry gives `where` (heading path or job/step), `lines` (1-based, inclusive; for beads, within `field`), `reason`, `probability` and `text`.
+- The action is the group (keep, remove or fix) with the highest summed probability. The reason is the top option within that group.
 
 | Exit code | Meaning |
 |---|---|
-| 0 | clean or `needs_context` |
-| 1 | ceremony |
-| 2 | error; no verdict |
+| 0 | nothing to remove or fix |
+| 1 | at least one remove or fix |
+| 2 | error; no review ran |
 
-## Reporting
+## Applying it
 
-- Report each flagged section with its path and the flagged question ids.
-- A `needs_context` section is unscored. Don't count it as clean.
-- An error means no evaluation ran. Report its code and message, and don't substitute your own judgment as a Jev result.
+- **remove:** delete the item's lines. Then re-read the surrounding text, and fix any reference or numbering the deletion broke.
+- **fix:** change the item so the gate holds, for example by dropping `continue-on-error` or restoring the in-scope acceptance. Don't delete it.
+- **needs_context:** leave it unchanged and list it in your report.
+- Report every change with its unit, lines and reason.
+- An error means no review ran. Report the code and message, and don't substitute your own judgment as a Jev result.
