@@ -47,7 +47,7 @@ The agent collects the context the reference describes, runs the script, and ret
 ## Step 3: Review the findings
 
 The result has, per unit:
-- `findings`: items whose pattern probability reached the threshold (0.8). Each has `where`, `lines`, `pattern`, `probability`, `patterns` (every pattern at 0.05 or more) and the start of `text`. Bead findings also have `field`.
+- `findings`: items whose pattern probability reached the threshold (0.8). Each has `where`, `lines`, `pattern` (the top pattern), `pattern_probability` (the sum over all patterns), `patterns` (each pattern's own probability, if 0.05 or more) and the start of `text`. Bead findings also have `field`.
 - `uncertain`: items that reached the threshold neither as a pattern nor as clear. They carry the same fields plus `clear_probability` and `insufficient_probability`.
 - `clear`: the count of items Jev classified as clear.
 
@@ -61,6 +61,6 @@ For each finding, read the full item at its location and check it against:
 Report, per unit:
 - each finding: location, Jev's pattern and probability, your assessment, and your recommendation. Say where you disagree with Jev, and why;
 - the `uncertain` items whose `pattern` you would look at, with Jev's leaning;
-- the counts: findings, uncertain, clear.
+- the counts: findings, uncertain, clear, and any input you set aside, with why.
 
 On `success: false`, report `error.code`, `message` and `suggested_action`. Don't substitute your own judgment for a Jev result.

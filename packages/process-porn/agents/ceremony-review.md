@@ -46,7 +46,7 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
     "units": [
       {"unit": "ci.yml", "source": ".github/workflows/ci.yml",
        "findings": [{"item": "i31", "where": "jobs.manifest-validation.steps[12] Validate docs consistency",
-                     "lines": [233, 234], "pattern": "redundant", "probability": 0.96,
+                     "lines": [233, 234], "pattern": "redundant", "pattern_probability": 0.96,
                      "patterns": {"redundant": 0.96}, "text": "- name: Validate docs consistency ..."}],
        "uncertain": [], "clear": 52}
     ],

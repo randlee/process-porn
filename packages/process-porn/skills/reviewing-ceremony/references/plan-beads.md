@@ -1,6 +1,6 @@
 # Category: plan (beads)
 
-Use this reference for plans stored as beads. Use `plan.md` for plans in markdown files. Collect the context with `plan.md` steps 1, 2, 4 and 5. Step 3 comes from the bead JSON itself.
+Use this reference for plans stored as beads. Use `plan.md` for plans in markdown files.
 
 ## Inputs
 
@@ -24,6 +24,8 @@ To get every sprint under a phase root:
   ```
 
 Always pass ids explicitly. A bare `br show` falls back to the last-touched bead.
+
+A phase root's children can include beads that are not sprint plans: sanity, QA or review siblings, and closed planning beads. Pass only the beads that describe a sprint's work, chosen by `issue_type` and title, not by id pattern. Report the beads you set aside, with why.
 
 `bd show` and `br show` both print a JSON list of issue objects with `id`, `title`, `issue_type`, `description`, `design`, `acceptance_criteria` and `notes`. Only `bd` adds `metadata`. Fetch full content with `show`, because `list` output can omit the text fields (`bd list --brief` always does).
 
@@ -64,11 +66,13 @@ If your CLI's JSON names these fields differently, map them to the names above b
 
 ## Context file
 
-Write the file as `plan.md` describes, with steps 1, 2, 4 and 5. For bd, add one line per bead:
+Write the file as `plan.md` describes, with these steps:
 
-```
-<id>: metadata holds <keys>
-```
+1. **Phase goal:** from the phase root bead's description, or the phase README.
+2. **Tools that read bead fields:** for each metadata key, search tooling as `plan.md` step 2 does, with the key in place of `<Label>`. Record `<key>: parsed by <path>`, `mentioned in <path>, not parsed`, or `no reader found`.
+3. **Fields the bead already holds:** the script sends each bead's metadata keys to Jev, so skip this step.
+4. **Out-of-scope owners:** for each sprint named as owning out-of-scope work, record whether its bead exists under the phase root.
+5. **Validation commands:** for each command named in the bead text, record whether CI or a gate runs it. If the beads name none, record `no validation commands named`.
 
 The 8,000-byte limit still applies.
 
@@ -78,6 +82,8 @@ The 8,000-byte limit still applies.
 bd show <ids...> --json | python3 <script> plan --beads-json - --context <file> --brief 240
 br show <ids...> --json | python3 <script> plan --beads-json - --context <file> --brief 240
 ```
+
+Only stdout is piped, so CLI warnings on stderr don't reach the script. Exit 0 means no findings, 1 means findings were reported, 2 means an error.
 
 To combine several calls, write the wrapped object to a file and pass `--beads-json <file>`. Don't also pass input paths: `--beads-json` replaces them.
 

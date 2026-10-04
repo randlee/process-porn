@@ -489,7 +489,7 @@ def review_unit(situation, unit, key, transport=post, minimum_probability=0.8):
                 continue
             ranked = sorted(((p, o) for o, p in groups["patterns"].items() if p >= 0.05), reverse=True)
             entry = {"item": item["qid"], "where": item["path"], "lines": [item["start"], item["end"]],
-                     "pattern": ranked[0][1] if ranked else None, "probability": round(groups["pattern"], 2),
+                     "pattern": ranked[0][1] if ranked else None, "pattern_probability": round(groups["pattern"], 2),
                      "patterns": {o: round(p, 2) for p, o in ranked}, "text": item["text"]}
             if "field" in item:
                 entry["field"] = item["field"]

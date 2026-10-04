@@ -10,7 +10,9 @@ One run covers one phase. Run once per phase, because the context below is phase
 
 ## Context to collect
 
-Each item states one fact, cites its source path, and is one line, two at most. Collect facts only; don't classify the plan items.
+Each item states one fact and is one line, two at most. Collect facts only; don't classify the plan items.
+
+Record only what a command printed. Under each heading, list the commands you ran. If you ran none for a step, write `not collected`. Jev treats every fact as true.
 
 1. **Phase goal.** Take the opening paragraph of the phase plan or README, up to about 1,000 bytes.
 2. **Tools that read plan fields.** These stop data that tools read from being flagged as narration.
@@ -35,6 +37,8 @@ Write the file to a temporary path as markdown, with one heading per numbered st
 ```bash
 python3 <script> plan <inputs...> [--sprint-level N] --context <file> --brief 240
 ```
+
+Exit 0 means no findings, 1 means findings were reported, 2 means an error.
 
 ## Reading results
 

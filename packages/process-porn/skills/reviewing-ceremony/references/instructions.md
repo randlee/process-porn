@@ -8,6 +8,8 @@ CLAUDE.md, AGENTS.md, `SKILL.md` files, and agent prompt files (`.claude/agents/
 
 Each item states one fact, cites its source path, and is one line. Collect facts only; don't classify the rules.
 
+Record only what a command printed. Under each heading, list the commands you ran. If you ran none for a step, write `not collected`. Jev treats every fact as true.
+
 1. **Who loads each file and when.**
    - CLAUDE.md and AGENTS.md: every session in the repo.
    - A skill: its frontmatter `description`, and the skills, agents or commands that name it (`rg -l '<skill-name>' .claude`).
@@ -31,6 +33,8 @@ Write the file to a temporary path as markdown, with one heading per numbered st
 ```bash
 python3 <script> instructions <files...> --context <file> --brief 240
 ```
+
+Exit 0 means no findings, 1 means findings were reported, 2 means an error.
 
 ## Reading results
 
