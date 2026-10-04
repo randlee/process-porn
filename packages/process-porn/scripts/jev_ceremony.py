@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 import re
 import socket
-import subprocess
 import sys
 import time
 
@@ -237,20 +236,29 @@ def plan_unit_from_bead(bead):
         lines = (bead.get(field) or "").splitlines()
         items += [dict(i, field=field) for i in md_items(lines, 1, field)]
         fields.append(f"{field}: " + "; ".join(l.strip() for l in lines if HEADING.match(l)))
-    context = cap(f"Title: {title}\nOutline:\n" + "\n".join(fields) + "\n\nDescription:\n" + (bead.get("description") or ""))
+    metadata = bead.get("metadata") if isinstance(bead.get("metadata"), dict) else {}
+    context = cap(f"Title: {title}\nType: {bead.get('issue_type', '')}\nMetadata keys: {', '.join(sorted(metadata))}\n"
+                  "Outline:\n" + "\n".join(fields) + "\n\nDescription:\n" + (bead.get("description") or ""))
     return {"id": bead["id"], "title": title, "source": f"bead {bead['id']}", "context": context, "items": items}
 
 
-def read_bead(bead_id):
+def load_beads(path):
+    """Read bead objects from a file or '-' (stdin): a bare list, or {"source": "bd"|"br", "beads": [...]}."""
+    raw = sys.stdin.read() if str(path) == "-" else Path(path).read_text(encoding="utf-8")
     try:
-        proc = subprocess.run(["bd", "show", bead_id, "--json"], stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.TimeoutExpired):
-        raise JevError("VALIDATION.INPUT", f"bd show {bead_id} failed or timed out") from None
-    if proc.returncode:
-        raise JevError("VALIDATION.INPUT", f"bd show {bead_id} exited {proc.returncode}")
-    data = json.loads(proc.stdout)
-    return data[0] if isinstance(data, list) else data
+        data = json.loads(raw)
+    except ValueError:
+        raise JevError("VALIDATION.INPUT", "Bead input is not JSON") from None
+    beads = data.get("beads") if isinstance(data, dict) else data
+    if not isinstance(beads, list) or not beads:
+        raise JevError("VALIDATION.INPUT", "Bead input must be a non-empty list or an object with a non-empty beads list")
+    for bead in beads:
+        if not isinstance(bead, dict) or not isinstance(bead.get("id"), str) or not bead["id"]:
+            raise JevError("VALIDATION.INPUT", "Every bead needs a string id")
+        for field in BEAD_FIELDS + ("title",):
+            if bead.get(field) is not None and not isinstance(bead[field], str):
+                raise JevError("VALIDATION.INPUT", f"Bead {bead['id']} field {field} must be a string")
+    return beads
 
 
 # ---------- ci units ----------
@@ -506,10 +514,12 @@ def collect_units(args):
     if args.situation == "ci":
         inventory = cap(ci_inventory(args.inputs), CI_INVENTORY_BYTES)
         return [ci_unit(p, inventory) for p in args.inputs]
-    if args.beads:
-        if args.situation != "plan":
-            raise JevError("VALIDATION.INPUT", "--beads applies to the plan situation only")
-        return [plan_unit_from_bead(read_bead(str(b))) for b in args.inputs]
+    if args.beads_json:
+        if args.situation != "plan" or args.inputs:
+            raise JevError("VALIDATION.INPUT", "--beads-json applies to the plan situation and replaces the input paths")
+        return [plan_unit_from_bead(b) for b in load_beads(args.beads_json)]
+    if not args.inputs:
+        raise JevError("VALIDATION.INPUT", "No inputs given")
     return [u for p in args.inputs for u in md_units(p, args.situation, args.sprint_level)]
 
 
@@ -517,7 +527,7 @@ SUGGESTED = {
     "JEV.UNAVAILABLE": "Set TYPESAFE_API_KEY or restore network access, then rerun",
     "JEV.RESPONSE_INVALID": "Rerun once; if it repeats, report the message to the skill owner",
     "JEV.INCONCLUSIVE": "Shrink the named item or the context file without dropping checks, then rerun",
-    "VALIDATION.INPUT": "Check the input paths or bead ids, then rerun",
+    "VALIDATION.INPUT": "Check the input paths or the bead JSON shape (references/plan-beads.md), then rerun",
 }
 
 
@@ -529,9 +539,9 @@ def failure(code, message, recoverable):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("situation", choices=sorted(SITUATIONS))
-    parser.add_argument("inputs", nargs="+",
-                        help="plan: sprint md files, or bead ids with --beads; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
-    parser.add_argument("--beads", action="store_true", help="plan inputs are bead ids, read with `bd show <id> --json`")
+    parser.add_argument("inputs", nargs="*",
+                        help="plan: sprint md files; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
+    parser.add_argument("--beads-json", metavar="FILE", help="plan: bead JSON from `bd show --json` or `br show --json`, a file or - for stdin")
     parser.add_argument("--sprint-level", type=int, help="plan md: each heading at this level starts a sprint (default: one sprint per file)")
     parser.add_argument("--context", type=Path, help=f"caller-collected context file (at most {CALLER_CONTEXT_BYTES} bytes), sent with every request")
     parser.add_argument("--minimum-probability", type=float, default=0.8)

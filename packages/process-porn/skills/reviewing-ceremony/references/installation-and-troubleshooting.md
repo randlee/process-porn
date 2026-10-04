@@ -5,7 +5,7 @@
 ```bash
 which python3 && python3 --version
 [ -n "$TYPESAFE_API_KEY" ] && echo set || echo missing
-which bd && bd --version   # plan reviews of beads only
+which bd || which br       # plan reviews of beads only
 ```
 
 If all of these pass, skip installation.
@@ -14,7 +14,7 @@ If all of these pass, skip installation.
 
 ```bash
 for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.pyenv/shims"; do
-  for cli in python3 bd; do [ -x "$d/$cli" ] && echo "$cli found at: $d/$cli"; done
+  for cli in python3 bd br; do [ -x "$d/$cli" ] && echo "$cli found at: $d/$cli"; done
 done
 ```
 
@@ -26,7 +26,7 @@ done
   - Windows: `winget install Python.Python.3.12`
 
   The script uses the standard library only.
-- **bd (beads):** follow https://github.com/steveyegge/beads. It's needed only for `plan` reviews of beads.
+- **bd (beads)** or **br (beads_rust):** follow https://github.com/steveyegge/beads or https://github.com/Dicklesworthstone/beads_rust. Either one is needed only for plan reviews of beads.
 - **TYPESAFE_API_KEY:** get a key from TypeSafe, then export it in the shell that launches Claude Code:
   ```bash
   export TYPESAFE_API_KEY=...
@@ -35,7 +35,7 @@ done
 ## Minimum Version
 
 - python3 3.9 or later.
-- bd: any version whose `bd show <id> --json` returns the issue object.
+- bd or br: any version whose `show <id> --json` returns the issue objects described in `plan-beads.md`.
 
 ## PATH Troubleshooting
 

@@ -16,8 +16,8 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
 
 - `category`: required. One of `plan`, `ci` or `instructions`.
 - `reference`: required. The absolute path of the category reference.
-- `inputs`: required list of paths, or bead ids for `plan` with `beads`.
-- Options the reference names, such as `beads` or `sprint_level`.
+- `inputs`: required. A list of paths, or sprint bead ids when the reference is `plan-beads.md`.
+- Options the reference names, such as `sprint_level`, or the beads CLI (`bd` or `br`).
 
 ## Execution Steps
 
@@ -72,5 +72,5 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
 
 - Never edit the reviewed files. The skill applies the changes.
 - Run the review command once. Don't retry it, and don't judge the items yourself.
-- Use read-only commands only when collecting context. No `gh` writes and no `bd` writes.
+- Use read-only commands only when collecting context. No `gh` writes, and no `bd` or `br` writes.
 - Never print or return `TYPESAFE_API_KEY`.

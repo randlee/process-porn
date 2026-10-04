@@ -17,6 +17,7 @@ artifacts:
   skills:
     - skills/reviewing-ceremony/SKILL.md
     - skills/reviewing-ceremony/references/plan.md
+    - skills/reviewing-ceremony/references/plan-beads.md
     - skills/reviewing-ceremony/references/ci.md
     - skills/reviewing-ceremony/references/instructions.md
     - skills/reviewing-ceremony/references/installation-and-troubleshooting.md

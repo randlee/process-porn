@@ -97,6 +97,32 @@ class MarkdownTests(unittest.TestCase):
                          [("description", "description > (preamble)"), ("acceptance_criteria", "acceptance_criteria > (preamble)")])
 
 
+class BeadInputTests(unittest.TestCase):
+    def write(self, d, value):
+        path = Path(d) / "beads.json"
+        path.write_text(json.dumps(value))
+        return path
+
+    def test_bare_list_and_wrapped_object(self):
+        bead = {"id": "x-1", "title": "t", "issue_type": "feature", "description": "Do it.", "metadata": {"branch": "b"}}
+        with tempfile.TemporaryDirectory() as d:
+            for value in ([bead], {"source": "br", "beads": [bead]}):
+                self.assertEqual([b["id"] for b in jc.load_beads(self.write(d, value))], ["x-1"])
+        unit = jc.plan_unit_from_bead(bead)
+        self.assertIn("Metadata keys: branch", unit["context"])
+
+    def test_bad_shapes_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            for value in ([], {"beads": []}, [{"title": "no id"}], [{"id": "x", "design": ["not", "text"]}]):
+                with self.assertRaises(jc.JevError):
+                    jc.load_beads(self.write(d, value))
+
+    def test_beads_json_excludes_paths(self):
+        args = jc.argparse.Namespace(situation="plan", inputs=["a.md"], beads_json="-", sprint_level=None, context=None)
+        with self.assertRaises(jc.JevError):
+            jc.load_units(args)
+
+
 class CiTests(unittest.TestCase):
     def test_header_jobs_and_steps(self):
         with tempfile.TemporaryDirectory() as d:
@@ -144,7 +170,7 @@ class CallerContextTests(unittest.TestCase):
             doc, ctx = Path(d) / "s.md", Path(d) / "ctx.md"
             doc.write_text(PLAN)
             ctx.write_text("scripts/dispatch.py reads Branch:")
-            args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads=False, sprint_level=None, context=ctx)
+            args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads_json=None, sprint_level=None, context=ctx)
             unit = jc.load_units(args)[0]
         for batch in jc.batches("plan", unit):
             self.assertEqual(jc.build_request("plan", unit, batch)["state"]["caller_context"], "scripts/dispatch.py reads Branch:")

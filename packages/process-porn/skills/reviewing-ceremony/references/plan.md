@@ -4,7 +4,7 @@
 
 - Sprint md files: one sprint per file, passed as paths.
 - One md file holding several sprints: pass `--sprint-level N`, where N is the heading level that starts each sprint.
-- Sprint beads: pass the bead ids with `--beads`. This needs `bd` on PATH; check with `which bd && bd --version`.
+- Plans stored as beads: use `plan-beads.md` instead.
 
 One run covers one phase. Run once per phase, because the context below is phase-wide.
 
@@ -18,9 +18,11 @@ Each item states one fact, cites its source path, and is one line, two at most. 
      ```bash
      rg -l --fixed-strings '<Label>' scripts .claude .github
      ```
-   - For each hit, record `<Label>: read by <path>`.
+   - Open each hit and classify it:
+     - **parsed:** code, a schema or a template that reads the value. Record `<Label>: parsed by <path>`.
+     - **mentioned:** prose that only talks about the field. Record `<Label>: mentioned in <path>, not parsed`.
    - For a label with no hits, record `<Label>: no reader found`.
-3. **Fields the bead already holds.** For bead-backed plans, run `bd show <sprint-bead> --json` and list the metadata keys. Record `bead metadata holds: <keys>`. A field present in both the md and the bead is a duplicate.
+3. **Fields the bead already holds.** If the md plan also has sprint beads, list each bead's metadata keys as `plan-beads.md` describes. Record `<bead id>: metadata holds <keys>`. A field present in both the md and the bead is a duplicate.
 4. **Out-of-scope owners.** For each sprint named in an out-of-scope or "does not close" section, record whether it exists in the phase: `d-32: exists in phase` or `d-32: not found`.
 5. **Validation commands.** For each command in the sprint's required-validation section, record whether CI or a gate runs it: `cargo clippy ...: run by .github/workflows/ci.yml` or `not run by CI`.
 
@@ -31,7 +33,7 @@ Write the file to a temporary path as markdown, with one heading per numbered st
 ## Run
 
 ```bash
-python3 <script> plan <inputs...> [--beads] [--sprint-level N] --context <file> --brief 240
+python3 <script> plan <inputs...> [--sprint-level N] --context <file> --brief 240
 ```
 
 ## Reading results

@@ -27,7 +27,8 @@ If python3 is still missing, or the key is unset, read `references/installation-
 
 | Category | Reviewed | Reference | Agent |
 |---|---|---|---|
-| `plan` | sprint plans: md files, or sprint beads | `references/plan.md` | `ceremony-review` |
+| `plan` | sprint plans in md files | `references/plan.md` | `ceremony-review` |
+| `plan` (beads) | sprint beads, from `bd` or `br` | `references/plan-beads.md` | `ceremony-review` |
 | `ci` | CI workflow files | `references/ci.md` | `ceremony-review` |
 | `instructions` | CLAUDE.md, AGENTS.md, skills, agent prompts | `references/instructions.md` | `ceremony-review` |
 
