@@ -8,19 +8,18 @@ Skills and scripts for TypeSafe Jev agent to unnecessary process and ceremony
 /plugin install process-porn@process-porn
 ```
 
-## Skills
+## Contents
 
-- `jev-ceremony-check` reviews three kinds of input, item by item, with typed Jev Choice questions:
-  - sprint plans (md files or beads);
-  - CI workflows;
-  - agent instructions (CLAUDE.md, AGENTS.md, skills, agent prompts).
+`packages/process-porn` provides:
+- the `reviewing-ceremony` skill. It routes by category (`plan`, `ci`, `instructions`), and each category's reference says what context to collect.
+- the `ceremony-review` agent. It collects that context, runs `scripts/jev_ceremony.py` and returns the remove/fix report as fenced JSON.
 
-  For each one it reports exactly which lines to remove or fix, and why. It needs `TYPESAFE_API_KEY`. See [the skill](plugins/process-porn/skills/jev-ceremony-check/SKILL.md).
+It needs python3 and `TYPESAFE_API_KEY`. See [the skill](packages/process-porn/skills/reviewing-ceremony/SKILL.md).
 
 ## Tests
 
 ```
-python3 -m unittest discover -s plugins/process-porn/skills/jev-ceremony-check/tests
+python3 -m unittest discover -s packages/process-porn/tests
 ```
 
 The tests use a stub transport. They cover item extraction, request packing, response validation and the report, not Jev's judgment.

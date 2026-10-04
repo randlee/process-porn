@@ -8,12 +8,12 @@
   "plugins": [
     {
       "name": "process-porn",
-      "description": "jev-ceremony-check: per-item Jev review of sprint plans, CI workflows and agent instructions; reports exactly what to remove or fix.",
+      "description": "reviewing-ceremony: per-category Jev review of sprint plans, CI workflows and agent instructions; reports exact lines to remove or fix.",
       "author": {
         "name": "randlee"
       },
       "category": "workflow",
-      "source": "./plugins/process-porn",
+      "source": "./packages/process-porn",
       "homepage": "https://github.com/randlee/process-porn"
     }
   ]

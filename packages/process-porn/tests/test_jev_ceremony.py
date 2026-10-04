@@ -138,6 +138,25 @@ class PackingTests(unittest.TestCase):
             jc.batches("plan", self.unit(["z" * 30000]))
 
 
+class CallerContextTests(unittest.TestCase):
+    def test_context_reaches_every_request(self):
+        with tempfile.TemporaryDirectory() as d:
+            doc, ctx = Path(d) / "s.md", Path(d) / "ctx.md"
+            doc.write_text(PLAN)
+            ctx.write_text("scripts/dispatch.py reads Branch:")
+            args = jc.argparse.Namespace(situation="plan", inputs=[doc], beads=False, sprint_level=None, context=ctx)
+            unit = jc.load_units(args)[0]
+        for batch in jc.batches("plan", unit):
+            self.assertEqual(jc.build_request("plan", unit, batch)["state"]["caller_context"], "scripts/dispatch.py reads Branch:")
+
+    def test_oversize_context_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            ctx = Path(d) / "ctx.md"
+            ctx.write_text("x" * (jc.CALLER_CONTEXT_BYTES + 1))
+            with self.assertRaises(jc.JevError):
+                jc.load_caller_context(ctx)
+
+
 class ReportTests(unittest.TestCase):
     def test_plan_report_routes_actions(self):
         with tempfile.TemporaryDirectory() as d:

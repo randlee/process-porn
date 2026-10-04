@@ -27,6 +27,7 @@ MAX_REQUEST_BYTES = 24000  # Conservative transport bound, not a vendor token co
 MAX_RESPONSE_BYTES = 1048576
 MAX_QUESTIONS = 12
 CONTEXT_BYTES = 6000
+CALLER_CONTEXT_BYTES = 8000
 ROUNDING = 0.005
 CI_INVENTORY_BYTES = 12000
 
@@ -37,6 +38,8 @@ CORE = (
     "A process artifact (certificate, ledger, dashboard, matrix, meta-report, readiness review, conformance check, review round) is justified "
     "only when it names all four: a concrete consumer, the gate it enforces, an observed (not speculative) defect class, and a retirement condition. "
     "An explicit operator request counts as consumer and gate. A minimal crash-recovery or provenance control that prevents a named data-loss mode is allowed. "
+    "state.caller_context, when present, holds facts the calling agent collected outside the reviewed text: tools that read fields, "
+    "required checks, loaders and enforcement. An item it names as read, required or enforced has that consumer; judge it accordingly. "
 )
 
 SITUATIONS = {
@@ -326,6 +329,7 @@ def build_request(situation, unit, items):
     state = {"rules": spec["rules"], "situation": situation,
              "unit": {"id": unit["id"], "title": unit["title"], "source": unit["source"]},
              "context": unit["context"],
+             "caller_context": unit.get("caller_context", ""),
              "items": {i["qid"]: {"where": f"{i['path']} (lines {i['start']}-{i['end']})", "text": i["text"]} for i in items}}
     questions = {i["qid"]: {"type": "choice", "instructions": spec["instructions"].format(id=i["qid"]), "criteria": spec["criteria"]}
                  for i in items}
@@ -481,7 +485,24 @@ def review_unit(situation, unit, key, transport=post, minimum_probability=0.8):
     return report
 
 
+def load_caller_context(path):
+    if path is None:
+        return ""
+    text = Path(path).read_text(encoding="utf-8")
+    if len(text.encode("utf-8")) > CALLER_CONTEXT_BYTES:
+        raise JevError("JEV.INCONCLUSIVE", f"Caller context exceeds {CALLER_CONTEXT_BYTES} bytes; keep facts that name items, drop the rest")
+    return text
+
+
 def load_units(args):
+    caller_context = load_caller_context(args.context)
+    units = collect_units(args)
+    for unit in units:
+        unit["caller_context"] = caller_context
+    return units
+
+
+def collect_units(args):
     if args.situation == "ci":
         inventory = cap(ci_inventory(args.inputs), CI_INVENTORY_BYTES)
         return [ci_unit(p, inventory) for p in args.inputs]
@@ -492,6 +513,19 @@ def load_units(args):
     return [u for p in args.inputs for u in md_units(p, args.situation, args.sprint_level)]
 
 
+SUGGESTED = {
+    "JEV.UNAVAILABLE": "Set TYPESAFE_API_KEY or restore network access, then rerun",
+    "JEV.RESPONSE_INVALID": "Rerun once; if it repeats, report the message to the skill owner",
+    "JEV.INCONCLUSIVE": "Shrink the named item or the context file without dropping checks, then rerun",
+    "VALIDATION.INPUT": "Check the input paths or bead ids, then rerun",
+}
+
+
+def failure(code, message, recoverable):
+    return {"success": False, "data": None, "error": {
+        "code": code, "message": message, "recoverable": recoverable, "suggested_action": SUGGESTED[code]}}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("situation", choices=sorted(SITUATIONS))
@@ -499,8 +533,10 @@ def main(argv=None):
                         help="plan: sprint md files, or bead ids with --beads; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
     parser.add_argument("--beads", action="store_true", help="plan inputs are bead ids, read with `bd show <id> --json`")
     parser.add_argument("--sprint-level", type=int, help="plan md: each heading at this level starts a sprint (default: one sprint per file)")
+    parser.add_argument("--context", type=Path, help=f"caller-collected context file (at most {CALLER_CONTEXT_BYTES} bytes), sent with every request")
     parser.add_argument("--minimum-probability", type=float, default=0.8)
     parser.add_argument("--dry-run", action="store_true", help="print units, item counts and request sizes; no Jev call")
+    parser.add_argument("--brief", type=int, metavar="CHARS", help="truncate each reported item's text to CHARS characters")
     args = parser.parse_args(argv)
     try:
         units = load_units(args)
@@ -513,12 +549,16 @@ def main(argv=None):
             reports = [review_unit(args.situation, u, key, minimum_probability=args.minimum_probability) for u in units]
             totals = {k: sum(len(r[k]) for r in reports) for k in ("remove", "fix", "needs_context")}
             totals["kept"] = sum(r["kept"] for r in reports)
+            if args.brief:
+                for entry in (e for r in reports for k in ("remove", "fix", "needs_context") for e in r[k]):
+                    if len(entry["text"]) > args.brief:
+                        entry["text"] = entry["text"][:args.brief] + "…"
             data = {"situation": args.situation, "units": reports, "totals": totals}
         result = {"success": True, "data": data, "error": None}
     except JevError as exc:
-        result = {"success": False, "data": None, "error": {"code": exc.code, "message": exc.message, "recoverable": exc.recoverable}}
+        result = failure(exc.code, exc.message, exc.recoverable)
     except (OSError, UnicodeError, ValueError):
-        result = {"success": False, "data": None, "error": {"code": "VALIDATION.INPUT", "message": "Input unavailable or unreadable", "recoverable": False}}
+        result = failure("VALIDATION.INPUT", "Input unavailable or unreadable", False)
     print(json.dumps(result, indent=2, allow_nan=False))
     if not result["success"]:
         return 2
