@@ -268,14 +268,24 @@ def load_beads(path):
 SCOPES = ("local", "global", "both")
 
 
+CONFIG_DIRS = (".claude", ".codex", ".agents")
+
+
+def global_dirs():
+    """User-level instruction directories for Claude Code and Codex."""
+    codex = os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
+    return [Path.home() / ".claude", Path(codex), Path.home() / ".agents"]
+
+
 def scope_roots(scope, root):
-    """Instruction roots for a scope: local is the repository, global is ~/.claude."""
-    local, home = Path(root), Path.home() / ".claude"
-    return {"local": [local], "global": [home], "both": [local, home]}[scope]
+    """(directory holding CLAUDE.md and AGENTS.md, directories holding skills/ and agents/) per root in the scope."""
+    local = (Path(root), [Path(root) / d for d in CONFIG_DIRS])
+    home = [(d, [d]) for d in global_dirs()]
+    return {"local": [local], "global": home, "both": [local] + home}[scope]
 
 
 def instruction_files(scope, root):
-    """CLAUDE.md and AGENTS.md at each root, skill markdown (SKILL.md and references) and agent prompts; symlinks followed, duplicates dropped."""
+    """CLAUDE.md and AGENTS.md, skill markdown (SKILL.md and references) and agent prompts in the scope; symlinks followed, duplicates dropped."""
     found, seen = [], set()
 
     def add(path):
@@ -284,21 +294,21 @@ def instruction_files(scope, root):
             seen.add(real)
             found.append(Path(path))
 
-    for base in scope_roots(scope, root):
-        claude = base if base.name == ".claude" else base / ".claude"
+    for base, config_dirs in scope_roots(scope, root):
         for name in ("CLAUDE.md", "AGENTS.md"):
             add(base / name)
-        for sub in ("skills", "agents"):
-            for dirpath, _, files in sorted(os.walk(claude / sub, followlinks=True)):
-                for name in sorted(files):
-                    if name.endswith(".md"):
-                        add(Path(dirpath) / name)
+        for config in config_dirs:
+            for sub in ("skills", "agents"):
+                for dirpath, _, files in sorted(os.walk(config / sub, followlinks=True)):
+                    for name in sorted(files):
+                        if name.endswith(".md"):
+                            add(Path(dirpath) / name)
     return found
 
 
 def in_scope(path, scope, root):
     real = Path(os.path.realpath(path))
-    return any(real.is_relative_to(Path(os.path.realpath(r))) for r in scope_roots(scope, root))
+    return any(real.is_relative_to(Path(os.path.realpath(base))) for base, _ in scope_roots(scope, root))
 
 
 # ---------- ci units ----------
@@ -596,7 +606,7 @@ def main(argv=None):
                         help="plan: sprint md files; ci: workflow files; instructions: CLAUDE.md, AGENTS.md, SKILL.md or agent prompt files")
     parser.add_argument("--beads-json", metavar="FILE", help="plan: bead JSON from `bd show --json` or `br show --json`, a file or - for stdin")
     parser.add_argument("--sprint-level", type=int, help="plan md: each heading at this level starts a sprint (default: one sprint per file)")
-    parser.add_argument("--scope", choices=SCOPES, help="instructions: local (the repository), global (~/.claude) or both; required. Without inputs, reviews every CLAUDE.md, AGENTS.md, skill and agent file in the scope")
+    parser.add_argument("--scope", choices=SCOPES, help="instructions: local (the repository), global (~/.claude, $CODEX_HOME or ~/.codex, ~/.agents) or both; required. Without inputs, reviews every CLAUDE.md, AGENTS.md, skill and agent file in the scope")
     parser.add_argument("--root", default=".", help="instructions: repository root for the local scope (default: current directory)")
     parser.add_argument("--context", type=Path, help=f"caller-collected context file (at most {CALLER_CONTEXT_BYTES} bytes), sent with every request")
     parser.add_argument("--minimum-probability", type=float, default=0.8)

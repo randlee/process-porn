@@ -36,12 +36,13 @@ If python3 is still missing, or the key is unset, read `references/installation-
 
 If a plan exists both as md and as beads, review the copy the repo treats as the source. Read only the matching reference. A request that spans categories runs once per category.
 
-Invoke the `ceremony-review` agent with the Task tool, passing:
+In Claude Code, invoke the `ceremony-review` agent with the Task tool. Where no such agent is available, as in Codex, follow `../../agents/ceremony-review.md` (relative to this skill's directory) yourself. Pass:
 - `category`;
 - `reference`: the absolute path of the matching reference;
 - `inputs`;
 - any options the reference names, such as the `instructions` scope;
-- `max_requests`: optional, default 100.
+- `max_requests`: optional, default 100;
+- `script`: `../../scripts/jev_ceremony.py` resolved against this skill's directory, as an absolute path.
 
 The agent sizes the run first. If it needs more Jev requests than `max_requests`, the agent returns the size per unit without running. Report it, then narrow the inputs or raise `max_requests` as the user decides. Otherwise the agent collects the context the reference describes, runs the script, and returns fenced JSON. Treat unfenced or malformed JSON as a failure.
 

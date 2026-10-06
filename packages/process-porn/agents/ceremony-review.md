@@ -10,7 +10,7 @@ tools: Bash, Read, Write, Grep, Glob
 
 ## Invocation
 
-The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't invoke it directly.
+The `reviewing-ceremony` skill invokes this agent through the Task tool. Where subagents aren't available, as in Codex, the skill's caller follows these steps itself.
 
 ## Inputs
 
@@ -19,16 +19,15 @@ The `reviewing-ceremony` skill invokes this agent through the Task tool. Don't i
 - `inputs`: a list of paths, or sprint bead ids when the reference is `plan-beads.md`. Required, except for `instructions`, where an empty list means every file in the scope.
 - Options the reference names, such as `sprint_level`, the beads CLI (`bd` or `br`), or the `instructions` scope (`local`, `global` or `both`).
 - `max_requests`: optional, default 100.
-- `script`: optional. The path of `jev_ceremony.py`, for a run from a source checkout.
+- `script`: the absolute path of `jev_ceremony.py`, which the skill resolves from its own directory.
 
 ## Execution Steps
 
 1. Read `reference` in full. Check any CLI it lists. If one is missing, or `instructions` has no scope, return `VALIDATION.INPUT` and name it.
 2. Locate the script.
-   - If `script` is given, use it.
-   - If `CLAUDE_PLUGIN_ROOT` is set, use `$CLAUDE_PLUGIN_ROOT/scripts/jev_ceremony.py`.
-   - Otherwise run `find .claude ~/.claude -name jev_ceremony.py` and use the newest match.
-   - If there is no match, return `REGISTRY.RESOLUTION`.
+   - Use `script` if it is given and the file exists.
+   - Otherwise, in Claude Code, use `$CLAUDE_PLUGIN_ROOT/scripts/jev_ceremony.py` if that variable is set.
+   - Otherwise return `REGISTRY.RESOLUTION`.
 3. Size the run: the reference's command with `--dry-run` in place of `--context` and `--brief`. If `data.totals.requests` exceeds `max_requests`, return the dry-run JSON and stop.
 4. Collect the context exactly as the reference's "Context to collect" section says.
    - Write it to a temporary file, as the reference's "Context file" section describes.

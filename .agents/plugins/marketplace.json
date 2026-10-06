@@ -1,0 +1,20 @@
+{
+  "name": "process-porn",
+  "interface": {
+    "displayName": "process-porn"
+  },
+  "plugins": [
+    {
+      "name": "process-porn",
+      "source": {
+        "source": "local",
+        "path": "./packages/process-porn"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

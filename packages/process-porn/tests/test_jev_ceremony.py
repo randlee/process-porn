@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -168,6 +169,34 @@ class ScopeTests(unittest.TestCase):
             root = self.tree(d)
             names = sorted(p.relative_to(root).as_posix() for p in jc.instruction_files("local", root))
         self.assertEqual(names, [".claude/agents/a.md", ".claude/skills/s/SKILL.md", ".claude/skills/s/references/r.md", "CLAUDE.md"])
+
+    def test_codex_and_agents_dirs_are_in_scope(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = self.tree(d)
+            for rel in (".codex/skills/c/SKILL.md", ".agents/skills/g/SKILL.md", ".agents/plugins/marketplace.md"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("# t\n", encoding="utf-8")
+            names = {p.relative_to(root).as_posix() for p in jc.instruction_files("local", root)}
+        self.assertTrue({".codex/skills/c/SKILL.md", ".agents/skills/g/SKILL.md"} <= names)
+        self.assertNotIn(".agents/plugins/marketplace.md", names)
+
+    def test_global_scope_follows_codex_home(self):
+        with tempfile.TemporaryDirectory() as d:
+            codex = Path(d) / "codex-home"
+            (codex / "skills/s").mkdir(parents=True)
+            (codex / "AGENTS.md").write_text("# a\n", encoding="utf-8")
+            (codex / "skills/s/SKILL.md").write_text("# s\n", encoding="utf-8")
+            saved = os.environ.get("CODEX_HOME")
+            os.environ["CODEX_HOME"] = str(codex)
+            try:
+                found = {p.as_posix() for p in jc.instruction_files("global", d)}
+            finally:
+                if saved is None:
+                    os.environ.pop("CODEX_HOME")
+                else:
+                    os.environ["CODEX_HOME"] = saved
+        self.assertIn((codex / "AGENTS.md").as_posix(), found)
+        self.assertIn((codex / "skills/s/SKILL.md").as_posix(), found)
 
     def test_scope_required_and_inputs_must_be_inside(self):
         with tempfile.TemporaryDirectory() as d:
